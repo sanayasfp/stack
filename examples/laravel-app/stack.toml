@@ -1,0 +1,18 @@
+[project]
+name = "laravel-app"
+domain = "laravel-app.localhost"
+
+[language]
+php = "8.3.1"
+
+[service.mysql]
+version = "8.0.35"
+schema = "laravel_app"   # optional -- defaults to the project name anyway
+
+[tool.composer]
+version = "2.7.7"   # stack fetches composer.phar itself for this one
+
+[run]
+# Once this is a real Laravel install (see README), swap this for:
+#   command = "php artisan serve --host=127.0.0.1 --port={port}"
+command = "php -S 127.0.0.1:{port} -t public"

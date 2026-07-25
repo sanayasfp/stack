@@ -1,0 +1,7 @@
+{
+  "name": "node-api",
+  "private": true,
+  "scripts": {
+    "dev": "node --watch server.js"
+  }
+}

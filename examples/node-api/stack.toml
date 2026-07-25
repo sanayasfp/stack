@@ -1,0 +1,13 @@
+[project]
+name = "node-api"
+domain = "node-api.localhost"
+
+[language]
+node = "20.11.0"
+
+[run]
+# node --watch (built into Node 18+) -- stack spawns and supervises it
+# directly. Compare with examples/fastapi-dev, which uses [run].external
+# to run its own dev server by hand instead.
+command = "node --watch server.js"
+port = 3000

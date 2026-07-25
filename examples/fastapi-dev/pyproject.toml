@@ -1,0 +1,10 @@
+[project]
+name = "fastapi-dev"
+version = "0.1.0"
+description = "stack example -- FastAPI dev server via [run].external"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.140.0",
+    "uvicorn[standard]>=0.51.0",
+]

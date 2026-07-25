@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Manifest Reference — stack docs</title>
+<meta name="description" content="Every stack.toml field, with defaults and examples." />
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 clamp(20px, 5vw, 72px); }
+.nav { padding-inline: max(clamp(20px, 5vw, 72px), calc((100% - 1200px) / 2 + clamp(20px, 5vw, 72px))); }
+.nav a[aria-current='page'] { color: var(--color-accent-700); }
+.docs-main p, .docs-main li { font-size: 15px; }
+.docs-main .lead { font-size: 17px; opacity: 0.85; max-width: 60ch; }
+.field-table td:first-child, .field-table th:first-child { font-family: var(--font-heading); white-space: nowrap; }
+.field-table code { font-size: 0.85em; }
+.default-tag { display: inline-block; font-family: var(--font-heading); font-size: 11px; padding: 1px 7px; border: 1px solid var(--color-divider); color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+</style>
+</head>
+<body>
+<nav class="nav site-nav">
+  <a href="index.html" class="nav-lockup"><img class="nav-mark" src="assets/logo.svg" alt="" /><span class="nav-brand">stack</span></a>
+  <div class="nav-links">
+    <a href="getting-started.html" aria-current="page">Docs</a>
+    <a href="changelog.html">Changelog</a>
+    <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <button type="button" class="btn btn-secondary btn-icon theme-toggle blueprint" id="theme-toggle" aria-label="Switch between light and dark">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</nav>
+<div class="wrap docs-layout">
+  <aside class="docs-side">
+    <div class="side-group">
+      <h6>Guide</h6>
+      <a href="getting-started.html">Getting Started</a>
+    </div>
+    <div class="side-group">
+      <h6>Reference</h6>
+      <a href="manifest.html" aria-current="page">Manifest (stack.toml)</a>
+      <a href="cli.html">CLI Commands</a>
+    </div>
+    <div class="side-group">
+      <h6>More</h6>
+      <a href="https://github.com/sanayasfp/stack/tree/main/examples" target="_blank" rel="noopener">Examples</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </aside>
+
+  <main class="docs-main">
+    <span class="kicker" style="display:block;font-family:var(--font-heading);font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--color-accent-700);margin-bottom:8px;">Reference</span>
+    <h1>Manifest Reference</h1>
+    <p class="lead"><code>stack.toml</code> lives in your project root and is meant to be committed — it's the whole "share a stack" file, the non-container equivalent of a Dockerfile. Every field below is optional unless marked required; a bare <code>stack.toml</code> with just a <code>[project]</code> section is valid.</p>
+
+    <h2 id="project">[project]</h2>
+    <div class="table-wrap">
+    <table class="table field-table">
+      <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>name</td><td>string</td><td><span class="default-tag">folder name</span></td><td>Used to key <code>stack status</code>/<code>stack logs</code>/<code>stack down</code> and as the default domain prefix.</td></tr>
+        <tr><td>domain</td><td>string</td><td><span class="default-tag">{name}.localhost</span></td><td><code>.localhost</code> resolves with zero setup in Chrome/Firefox/Edge — no hosts-file edit. Non-browser clients (curl, backend-to-backend calls) fall back to <code>127.0.0.1:&lt;port&gt;</code>.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="blueprint term">
+      <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">stack.toml</span></div>
+      <pre class="term-body">[project]
+name = "acme-api"
+domain = "acme-api.localhost"</pre>
+    </div>
+
+    <h2 id="clone">[[clone]]</h2>
+    <p>Array of tables. Lets a bare <code>stack.toml</code>, dropped in an empty folder, bootstrap the whole project — <code>stack up</code> clones anything missing before doing anything else, and never touches a path that already exists.</p>
+    <div class="table-wrap">
+    <table class="table field-table">
+      <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>repo</td><td>string</td><td><em>required</em></td><td>Anything <code>git clone</code> accepts.</td></tr>
+        <tr><td>path</td><td>string</td><td><span class="default-tag">"."</span></td><td>Where it's cloned to, relative to the project root.</td></tr>
+        <tr><td>ref</td><td>string</td><td><span class="default-tag">default branch</span></td><td>Branch, tag, or commit SHA — cloned, then checked out separately (checkout accepts all three; <code>--branch</code> alone doesn't).</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h2 id="language">[language.&lt;name&gt;]</h2>
+    <p>Either a bare version string, or a table when you need more control — both forms can coexist as siblings, same as <code>Cargo.toml</code>'s <code>[dependencies]</code>.</p>
+    <div class="blueprint term">
+      <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">stack.toml</span></div>
+      <pre class="term-body">[language]
+php = "8.3.1"       # simple form
+node = "20.11.0"
+
+[language.rust]      # detailed form
+version = "1.75.0"
+manager = "vfox"</pre>
+    </div>
+    <div class="table-wrap">
+    <table class="table field-table">
+      <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>version</td><td>string</td><td><em>required unless <code>path</code> set</em></td><td>&nbsp;</td></tr>
+        <tr><td>manager</td><td>string</td><td><span class="default-tag">inferred</span></td><td><code>php</code>/<code>node</code> → vfox, <code>python</code> → uv. Any other name needs <code>manager</code> set explicitly.</td></tr>
+        <tr><td>plugin</td><td>string</td><td><span class="default-tag">the table key</span></td><td>vfox plugin name override, for the rare mismatch (e.g. Node's plugin is named <code>nodejs</code>).</td></tr>
+        <tr><td>binary</td><td>string</td><td><span class="default-tag">{name}.exe</span></td><td>Binary filename override.</td></tr>
+        <tr><td>path</td><td>string</td><td>—</td><td>BYO — a fixed, already-resolved binary. Bypasses vfox/uv entirely.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>Every project pinning the same language+version shares the one binary from vfox's/uv's own store — nothing is copied per project. Activation (see <a href="getting-started.html#ambient">Everyday use</a>) puts it first on <code>PATH</code> the moment you <code>cd</code> in.</p>
+
+    <h2 id="service">[service.&lt;name&gt;]</h2>
+    <div class="table-wrap">
+    <table class="table field-table">
+      <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>version</td><td>string</td><td><em>required</em></td><td>Also the key every other project shares an instance by — same engine+version reuses the one running process.</td></tr>
+        <tr><td>schema</td><td>string</td><td><span class="default-tag">project name</span></td><td>Project isolation is by schema/database name, not a separate data directory per project.</td></tr>
+        <tr><td>port</td><td>number</td><td><span class="default-tag">engine default</span></td><td>3306/5432/27017 for mysql/postgres/mongo; required explicitly for any other engine name.</td></tr>
+        <tr><td>command</td><td>string</td><td><span class="default-tag">engine default</span></td><td>Built in for mysql/postgres/mongo; required for anything else. <code>{port}</code>/<code>{data_dir}</code>/<code>{path}</code> placeholders available.</td></tr>
+        <tr><td>path</td><td>string</td><td>—</td><td>BYO binary, this project only. Omit to resolve by <code>version</code> via <code>stack register</code> instead.</td></tr>
+        <tr><td>external</td><td>bool</td><td><span class="default-tag">false</span></td><td>Adopt an already-running instance — stack only verifies it's listening, never starts/stops it. Errors if <code>path</code>/<code>command</code> are also set, or if nothing's actually listening.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="blueprint term">
+      <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">stack.toml</span></div>
+      <pre class="term-body">[service.mysql]
+version = "8.0.35"
+schema = "acme_api"   # optional — defaults to the project name</pre>
+    </div>
+
+    <h2 id="run">[run]</h2>
+    <p>The one process that needs a stable, routed domain — usually your app's own dev server. Omit <code>[run]</code> entirely and stack still activates languages and starts declared services; it just prints that nothing is routed.</p>
+    <div class="table-wrap">
+    <table class="table field-table">
+      <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>command</td><td>string</td><td><em>required unless <code>external</code></em></td><td><code>{port}</code> is substituted; <code>PORT</code> is also set as an env var, for anything reading <code>process.env.PORT</code>.</td></tr>
+        <tr><td>port</td><td>number</td><td><span class="default-tag">ephemeral</span></td><td>Pin it if anything (OAuth callback, CORS allowlist, a proxy target) hardcodes the port — stack errors clearly rather than silently picking a different one when it's taken.</td></tr>
+        <tr><td>cwd</td><td>string</td><td><span class="default-tag">project root</span></td><td>Which cloned path the command runs in — matters once <code>[[clone]]</code> has more than one entry.</td></tr>
+        <tr><td>external</td><td>bool</td><td><span class="default-tag">false</span></td><td>Run the dev server yourself, in your own terminal — stack only validates the port and routes to it, never spawns or tracks the process. <code>port</code> becomes required. See below.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3 id="run-external">Why <code>[run].external</code> exists</h3>
+    <p>Sometimes you'd rather run the dev server yourself — watch its own output directly in your own terminal, keep whatever reload workflow you already use, or just not hand the process over to another supervisor. <code>external = true</code> is built for that: stack's only job becomes routing a real domain to the port you tell it about.</p>
+    <div class="blueprint term">
+      <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">stack.toml</span></div>
+      <pre class="term-body">[run]
+external = true
+port = 8000</pre>
+    </div>
+
+    <h2 id="tool">[tool.&lt;name&gt;]</h2>
+    <div class="table-wrap">
+    <table class="table field-table">
+      <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>path</td><td>string</td><td>—</td><td>BYO — any tool you've already installed. Its directory is injected into the <code>[run]</code> process's <code>PATH</code>.</td></tr>
+        <tr><td>version</td><td>string</td><td>—</td><td>For the small set of tools stack knows how to fetch itself (Composer today), or resolved via <code>stack register</code> for anything you've registered globally.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h2 id="placeholders">Command placeholders</h2>
+    <p>Any <code>{VAR_NAME}</code> inside a <code>command</code> string resolves in order: reserved keywords (<code>{port}</code>, <code>{data_dir}</code>, <code>{path}</code>) first, then the process environment, then — only with <code>stack up --prompt</code> — an interactive prompt, masked for anything that looks like a secret. Nothing left unresolved fails silently: every unresolved name is reported together, not one at a time.</p>
+
+  </main>
+</div>
+<script src="site.js"></script>
+</body>
+</html>

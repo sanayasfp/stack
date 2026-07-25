@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>stack — one manifest, zero containers</title>
+<meta name="description" content="stack — native, zero-container multi-project dev environment manager. No Docker, no VMs." />
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+/* Template scaffolding — page layout and web-scale sizing only; every color,
+   font, radius and shadow comes from styles.css.
+
+   PHASE SCOPE: this page describes Phase 1 only — the Windows-only,
+   unmonetized CLI. No GUI, no pricing, no auto-update claims belong here;
+   those are Phase 2 and aren't built yet. Everything this page currently
+   asserts is either true today or in Phase 1's actual scope — not a
+   Phase 2 promise borrowed early. */
+:root {
+  --leading: 24px;
+  --half: 12px;
+  --edge: clamp(20px, 5vw, 72px);
+  --measure: 60ch;
+}
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; text-wrap: pretty; }
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 var(--edge); }
+.nav { padding-inline: max(var(--edge), calc((100% - 1200px) / 2 + var(--edge))); }
+.nav a { white-space: nowrap; }
+.nav a[aria-current='page'] { color: var(--color-accent-700); }
+
+.kicker {
+  display: block; font-family: var(--font-heading); font-size: 12px; line-height: var(--half);
+  letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600;
+  color: var(--color-accent-700);
+  font-variant-numeric: tabular-nums;
+  margin: 0 0 var(--half);
+}
+.caption-rule { height: 1px; border: 0; margin: 0 0 calc(var(--leading) - var(--half));
+  background: var(--color-divider); }
+
+/* — hero — */
+.hero { padding: calc(3.5 * var(--leading)) 0 calc(3 * var(--leading)); }
+.display {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: clamp(38px, 5.6vw, 68px);
+  line-height: 1.08;
+  letter-spacing: -0.01em; margin: 0;
+  text-wrap: balance;
+}
+.display .line { display: block; }
+.hero .sub { font-family: var(--font-body); font-size: 17px; line-height: var(--leading); max-width: var(--measure);
+  margin: calc(1.25 * var(--leading)) 0 0; opacity: 0.85; }
+.hero .row { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--leading); align-items: center; }
+.installline {
+  display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  font-family: var(--font-heading); font-size: 13px;
+  border: 1px solid var(--color-divider); padding: var(--space-2) var(--space-3);
+  max-width: 100%; min-width: 0; overflow-wrap: anywhere;
+}
+.installline .p { color: var(--color-accent-700); }
+
+/* — the spec sheet — */
+.sheet { padding: calc(2.5 * var(--leading)) 0 calc(2.5 * var(--leading)); }
+.plate { position: relative; border: 1px solid var(--color-divider); }
+.plate > .corner { position: absolute; width: 15px; height: 15px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent); pointer-events: none; }
+.plate > .corner::before { content: ""; position: absolute; left: 7px; top: 0; width: 1px; height: 100%; background: currentColor; }
+.plate > .corner::after  { content: ""; position: absolute; top: 7px; left: 0; width: 100%; height: 1px; background: currentColor; }
+.plate > .corner.tl { top: -8px; left: -8px; }
+.plate > .corner.tr { top: -8px; right: -8px; }
+.plate > .corner.bl { bottom: -8px; left: -8px; }
+.plate > .corner.br { bottom: -8px; right: -8px; }
+.title-block { display: flex; flex-wrap: wrap; align-items: stretch;
+  border-bottom: 1px solid var(--color-divider); }
+.title-block > span { padding: var(--half) var(--leading);
+  font-family: var(--font-heading); font-size: 12px; line-height: var(--leading); letter-spacing: 0.08em;
+  text-transform: uppercase; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tb-title { flex: 1; min-width: 16ch; }
+.tb-cell { border-left: 1px solid var(--color-divider); white-space: nowrap;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.spec { table-layout: fixed; }
+.spec col.c-num { width: calc(3 * var(--leading)); }
+.spec col.c-prop { width: 34%; }
+.spec col.c-val { width: 20%; }
+.spec th, .spec td { padding: var(--half) var(--leading) var(--half) 0; vertical-align: middle; }
+.spec th:first-child, .spec td:first-child { padding-left: var(--leading); }
+.spec th { font-family: var(--font-heading); font-size: 12px; line-height: var(--half); font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.spec td { font-family: var(--font-body); font-size: 15px; line-height: var(--leading); }
+.spec .s-num { font-family: var(--font-heading); font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+  color: var(--color-accent-700); font-variant-numeric: tabular-nums; }
+.spec .s-val { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 19px; line-height: var(--leading); letter-spacing: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.spec .s-rem { font-family: var(--font-body); color: color-mix(in srgb, var(--color-text) 78%, transparent); }
+.spec tbody tr:last-child td { border-bottom: 0; }
+.spec tbody tr:hover { background: none; }
+.sheet-note { margin: 0; padding: var(--half) var(--leading);
+  border-top: 1px solid var(--color-divider); font-family: var(--font-body);
+  font-size: 13px; line-height: var(--leading);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+
+/* — wireframe feature cells — */
+.features { padding: calc(2.5 * var(--leading)) 0 calc(2.5 * var(--leading)); }
+.features > .caption-rule { margin-bottom: calc(var(--leading) + 8px); }
+.cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(20px, 3vw, 48px);
+  margin-top: calc(var(--leading) - var(--half)); }
+.cell-frame { position: relative; border: 1px solid var(--color-divider); padding: var(--leading); }
+.cell-frame > .corner { position: absolute; width: 15px; height: 15px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent); pointer-events: none; }
+.cell-frame > .corner::before { content: ""; position: absolute; left: 7px; top: 0; width: 1px; height: 100%; background: currentColor; }
+.cell-frame > .corner::after  { content: ""; position: absolute; top: 7px; left: 0; width: 100%; height: 1px; background: currentColor; }
+.cell-frame > .corner.tl { top: -8px; left: -8px; }
+.cell-frame > .corner.tr { top: -8px; right: -8px; }
+.cell-frame > .corner.bl { bottom: -8px; left: -8px; }
+.cell-frame > .corner.br { bottom: -8px; right: -8px; }
+.cell-frame h2 { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 19px; line-height: var(--leading); letter-spacing: 0; margin: 0; }
+.cell-frame p { font-family: var(--font-body); font-size: 14.5px; line-height: var(--leading); margin: calc(var(--half)) 0 0;
+  color: color-mix(in srgb, var(--color-text) 78%, transparent); }
+.cell-frame a.cell-link { display: inline-block; margin-top: var(--half); font-family: var(--font-heading); font-size: 12.5px; }
+
+/* — terminal split — */
+.split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--leading) clamp(24px, 5vw, 96px); align-items: center;
+  padding: calc(2 * var(--leading)) 0 calc(2.5 * var(--leading)); }
+.split-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 27px; line-height: calc(1.3 * var(--leading)); letter-spacing: 0; margin: 0; }
+.split-copy .note { font-family: var(--font-body); font-size: 15px; line-height: var(--leading);
+  color: color-mix(in srgb, var(--color-text) 78%, transparent);
+  margin: var(--half) 0 0; max-width: 48ch; }
+.split-figure { margin: 0; }
+.split-figure .term-body { font-size: 12.5px; }
+
+/* — quote — */
+.quote { padding: calc(2 * var(--leading)) 0 calc(3 * var(--leading)); }
+.quote blockquote {
+  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: clamp(22px, 2.4vw, 30px); line-height: calc(1.4 * var(--leading));
+  letter-spacing: 0; max-width: 38ch; margin: 0;
+}
+.quote figcaption { font-family: var(--font-body); font-size: 14.5px; line-height: var(--leading);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  margin: var(--half) 0 0; }
+
+/* — close — */
+.close { padding: calc(2 * var(--leading)) 0 calc(1.75 * var(--leading)); }
+.close h3 { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+  font-size: 21px; line-height: var(--leading); letter-spacing: 0; margin: 0; }
+.close .sub { font-family: var(--font-body); font-size: 14.5px; line-height: var(--leading);
+  color: color-mix(in srgb, var(--color-text) 78%, transparent);
+  margin: var(--half) 0 0; max-width: var(--measure); }
+.signup { display: flex; gap: var(--space-3); align-items: stretch; max-width: 480px; flex-wrap: wrap;
+  margin-top: var(--leading); }
+.signup .input { flex: 1; min-width: 200px; }
+.signup .input, .signup .btn { min-height: 36px; }
+footer { padding: calc(1.5 * var(--leading)) 0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--half);
+  font-family: var(--font-heading); font-size: 12px; line-height: var(--leading);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+footer a { color: inherit; }
+
+@media (max-width: 880px) {
+  .cells { grid-template-columns: 1fr; gap: calc(var(--leading) + 16px); }
+}
+@media (max-width: 720px) {
+  .tb-title { flex-basis: 100%; border-bottom: 1px solid var(--color-divider); }
+  .title-block > .tb-cell { padding-inline: var(--half); flex: 1 0 auto; }
+  .tb-title + .tb-cell { border-left: 0; padding-left: var(--leading); }
+  .spec thead { position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap; }
+  .spec, .spec tbody, .spec td { display: block; }
+  .spec tr { display: grid; grid-template-columns: max-content 1fr;
+    column-gap: var(--half); row-gap: var(--half); align-items: baseline;
+    padding: var(--leading);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-text) 8%, transparent); }
+  .spec tr:last-child { border-bottom: 0; }
+  .spec th, .spec td { padding: 0; border: 0; }
+  .spec th:first-child, .spec td:first-child { padding-left: 0; }
+  .spec .s-num { grid-column: 1; }
+  .spec .s-prop { grid-column: 2; }
+  .spec .s-val, .spec .s-rem { grid-column: 1 / -1; }
+  .split { grid-template-columns: 1fr; }
+  .split-figure { order: -1; }
+}
+</style>
+</head>
+<body>
+<nav class="nav site-nav">
+  <a href="index.html" class="nav-lockup" aria-current="page"><img class="nav-mark" src="assets/logo.svg" alt="" /><span class="nav-brand">stack</span></a>
+  <div class="nav-links">
+    <a href="getting-started.html">Docs</a>
+    <a href="changelog.html">Changelog</a>
+    <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <button type="button" class="btn btn-secondary btn-icon theme-toggle blueprint" id="theme-toggle" aria-label="Switch between light and dark">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+  <a href="getting-started.html" class="btn btn-primary blueprint"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Get started</a>
+</nav>
+<div class="wrap">
+
+  <section class="hero">
+    <h1 class="display"><span class="line">One manifest. Every language pinned.</span> <span class="line">Zero containers.</span></h1>
+    <p class="sub">stack orchestrates the native tools you'd install anyway — vfox, uv, Caddy, your own database binaries — from a single stack.toml. Plain child processes, a shared central store, no hypervisor idling in the background.</p>
+    <div class="row" style="margin-top: var(--half);">
+      <span class="tag tag-accent">Windows — available now</span>
+      <span class="tag tag-outline">macOS — coming soon</span>
+      <span class="tag tag-outline">Linux — coming soon</span>
+    </div>
+    <div class="row">
+      <a href="manifest.html" class="btn btn-primary blueprint"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Read the manifest</a>
+      <span class="installline"><span class="p">$</span> winget install stack.cli &amp;&amp; stack setup</span>
+    </div>
+  </section>
+
+  <section class="sheet" id="model" aria-label="stack — activation model">
+    <div class="plate">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <header class="title-block">
+        <span class="tb-title">stack — activation model</span>
+        <span class="tb-cell">v1</span>
+        <span class="tb-cell">3 kinds</span>
+        <span class="tb-cell">Sheet 01 of 01</span>
+      </header>
+      <table class="table spec">
+        <colgroup><col class="c-num"><col class="c-prop"><col class="c-val"><col class="c-rem"></colgroup>
+        <thead>
+          <tr><th scope="col">No.</th><th scope="col">Kind</th><th scope="col">Installed by</th><th scope="col">Activated by stack</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="s-num">01</td><td class="s-prop">language</td><td class="s-val">vfox / uv</td><td class="s-rem">Pinned per folder, resolved to a binary path</td></tr>
+          <tr><td class="s-num">02</td><td class="s-prop">service</td><td class="s-val">you, once</td><td class="s-rem">Started as a plain process, deduped by engine@version</td></tr>
+          <tr><td class="s-num">03</td><td class="s-prop">tool</td><td class="s-val">you, manually</td><td class="s-rem">Path registered, injected into the child PATH</td></tr>
+        </tbody>
+      </table>
+      <p class="sheet-note">Every project referencing the same engine@version shares the one running instance — schema-isolated, never duplicated.</p>
+    </div>
+  </section>
+
+  <section class="features" id="manifest">
+    <span class="kicker">02 · The manifest</span>
+    <hr class="caption-rule" />
+    <div class="cells">
+      <div class="cell-frame">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <h2>[project]</h2>
+        <p>Name defaults to the folder, domain defaults to {name}.localhost — reserved, so it resolves with zero setup, no hosts-file edit.</p>
+        <a class="cell-link" href="manifest.html#project">Reference →</a>
+      </div>
+      <div class="cell-frame">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <h2>[language] / [service]</h2>
+        <p>Pinned per project. Binaries are shared across every project at that version; only the schema is per-project.</p>
+        <a class="cell-link" href="manifest.html#language">Reference →</a>
+      </div>
+      <div class="cell-frame">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <h2>[run]</h2>
+        <p>The one process that needs a stable domain — routed through Caddy's admin API, logged, torn down as a unit.</p>
+        <a class="cell-link" href="manifest.html#run">Reference →</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="split">
+    <div class="split-copy">
+      <span class="kicker">03 · stack up</span>
+      <hr class="caption-rule" />
+      <h2 class="split-title">Real output, not a screenshot of one</h2>
+      <p class="note">stack has no product to photograph, so this page frames its own terminal instead of a duotoned stock image — clone, activate, start, route, in that order, every time.</p>
+    </div>
+    <figure class="split-figure blueprint term">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">acme-api — stack up</span></div>
+<pre class="term-body"><span class="term-prompt">$</span> stack up
+Loaded C:\Users\you\acme-api\stack.toml
+  project: acme-api
+  languages: ["php"]
+  services: ["mysql"]
+  php: C:\Users\you\.vfox\...\php.exe -&gt; PHP 8.3.1 (cli)
+  service.mysql: already running, shared with other projects (pid 41232, port 3306)
+  run: php -S 127.0.0.1:52140 -t public  (pid 41244, port 52140)
+  routed: http://acme-api.localhost -&gt; 127.0.0.1:52140</pre>
+    </figure>
+  </section>
+
+  <section class="quote">
+    <figure>
+      <blockquote>"cd in. The right PHP, the right Node, the right Mongo. Nothing running you didn't ask for."</blockquote>
+      <figcaption>— no hypervisor, no idle daemon: what stack up actually starts, and nothing else</figcaption>
+    </figure>
+  </section>
+
+  <section class="close" id="install">
+    <span class="kicker">04 · Get running</span>
+    <hr class="caption-rule" />
+    <h3>Two commands, then it's ambient</h3>
+    <p class="sub">Install the binary, run stack setup once, and every project with a stack.toml activates itself the moment you cd in — no daemon to remember to start.</p>
+    <div class="signup">
+      <input class="input" type="text" id="quickstart-cmd" value="stack new acme-api && cd acme-api && stack up" readonly aria-label="Quick start command" />
+      <button type="button" class="installline-copy" data-copy-target="quickstart-cmd" aria-label="Copy command">Copy</button>
+      <a href="getting-started.html" class="btn btn-primary blueprint"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>Get started</a>
+    </div>
+  </section>
+
+  <footer>
+    <span>stack — native, zero-container multi-project dev environment manager. No Docker, no VMs. MIT OR Apache-2.0.</span>
+    <span><a href="getting-started.html">Docs</a> · <a href="manifest.html">Manifest</a> · <a href="cli.html">CLI</a> · <a href="https://github.com/sanayasfp/stack/tree/main/examples" target="_blank" rel="noopener">Examples</a> · <a href="changelog.html">Changelog</a> · <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a></span>
+  </footer>
+</div>
+<script src="site.js"></script>
+</body>
+</html>

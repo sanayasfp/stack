@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Changelog — stack</title>
+<meta name="description" content="What's shipped so far, on the way to v1.0." />
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+.wrap { max-width: 800px; margin: 0 auto; padding: 0 clamp(20px, 5vw, 72px); }
+.nav { padding-inline: max(clamp(20px, 5vw, 72px), calc((100% - 1200px) / 2 + clamp(20px, 5vw, 72px))); }
+.nav a[aria-current='page'] { color: var(--color-accent-700); }
+main { padding-block: var(--space-8); }
+.lead { font-size: 17px; opacity: 0.85; max-width: 60ch; }
+.entry { margin: var(--space-8) 0; }
+.entry-tag { display: inline-flex; align-items: center; font-family: var(--font-heading); font-size: 11px;
+  letter-spacing: 0.02em; padding: 3px 10px; border: 1px solid var(--color-accent); color: var(--color-accent-700); margin-bottom: var(--space-2); }
+.entry h2 { margin-top: 0; }
+.entry ul { margin: var(--space-3) 0 0; padding-left: 1.2em; }
+.entry li { margin-bottom: var(--space-2); font-size: 14.5px; }
+.entry li code { font-size: 0.9em; }
+</style>
+</head>
+<body>
+<nav class="nav site-nav">
+  <a href="index.html" class="nav-lockup"><img class="nav-mark" src="assets/logo.svg" alt="" /><span class="nav-brand">stack</span></a>
+  <div class="nav-links">
+    <a href="getting-started.html">Docs</a>
+    <a href="changelog.html" aria-current="page">Changelog</a>
+    <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <button type="button" class="btn btn-secondary btn-icon theme-toggle blueprint" id="theme-toggle" aria-label="Switch between light and dark">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</nav>
+<div class="wrap">
+  <main>
+    <span class="kicker" style="display:block;font-family:var(--font-heading);font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--color-accent-700);margin-bottom:8px;">Changelog</span>
+    <h1>Changelog</h1>
+    <p class="lead">stack hasn't cut a tagged release yet — this page tracks what's actually built and working on the way to v1.0, grouped by area rather than by date. Real dated entries start at v1.0.0.</p>
+
+    <div class="entry">
+      <span class="entry-tag">Unreleased — building toward v1.0</span>
+      <h2>Core orchestration</h2>
+      <ul>
+        <li>Manifest-driven <code>stack up</code>/<code>stack down</code>: clone-if-missing, language activation, service start/reuse, dev-server spawn, domain routing — in that order.</li>
+        <li>Services dedup by <code>engine@version</code> — every project referencing the same database version shares the one running instance, isolated by schema.</li>
+        <li><code>[run].external</code> — run your own dev server yourself, in your own terminal, exactly how you already would; stack only routes to it.</li>
+        <li><code>[service.*].external</code> — adopt a database you already have running instead of colliding with it or starting a duplicate.</li>
+        <li>Detached process spawn that survives the launching terminal closing, with output captured to a per-process log file.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <h2>Routing</h2>
+      <ul>
+        <li>Caddy driven entirely over its HTTP admin API — no Caddyfile, no file writes, no reload signal. Started on demand, torn down with <code>stack down --all</code>.</li>
+        <li><code>stack status</code> shows Caddy's own liveness and live route count.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <h2>Shell integration</h2>
+      <ul>
+        <li>Ambient per-prompt activation for PowerShell — <code>cd</code> into a project and its pinned languages are on <code>PATH</code>; leave, and it resets.</li>
+        <li>cmd.exe support via a regenerated <code>stack-activate.bat</code>, run manually after <code>cd</code>-ing (cmd has no per-prompt hook the way PowerShell does).</li>
+        <li>Automatic Composer function shadowing for PHP projects, so <code>composer install</code> uses the project's pinned PHP version even though Composer's own installer hardcodes one.</li>
+        <li><code>stack load-env</code> — session-scoped <code>.env</code> loading; confirms which variable names loaded, never the values.</li>
+        <li>A small <code>[stack]</code> prompt indicator, on both shells, when a project is active.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <h2>Manifest &amp; CLI</h2>
+      <ul>
+        <li><code>[language.*]</code> generalized beyond php/node/python — any vfox-plugin language, an explicit manager, or a fully BYO path.</li>
+        <li><code>stack new</code> / <code>stack add</code> / <code>stack remove</code> — interactive scaffolding and format-preserving manifest edits that leave your comments and key order untouched.</li>
+        <li><code>stack register</code> + <code>stack list</code> + <code>stack prune</code> — reuse a BYO service/tool path across every project, see everything installed in one place, and clean up what's no longer referenced (dry-run by default).</li>
+        <li><code>stack stats</code> — continuously-refreshing CPU/memory view, <code>docker stats</code>-style.</li>
+        <li><code>stack doctor [--fix]</code> — checks vfox/uv/Caddy and every registered path; <code>--fix</code> installs the three at pinned, tested versions. Also flags pre-existing Windows database services worth adopting instead of duplicating.</li>
+      </ul>
+    </div>
+  </main>
+</div>
+<script src="site.js"></script>
+</body>
+</html>

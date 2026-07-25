@@ -1,0 +1,14 @@
+[project]
+name = "fastapi-dev"
+domain = "fastapi-dev.localhost"
+
+[language]
+python = "3.12.9"
+
+[run]
+# Run uvicorn yourself, in your own terminal -- keep using --reload exactly
+# how you already would. stack only validates the port and routes
+# fastapi-dev.localhost to it; see the Manifest Reference's
+# "Why [run].external exists".
+external = true
+port = 8000
