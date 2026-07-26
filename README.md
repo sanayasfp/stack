@@ -9,7 +9,9 @@ ask for.
 
 **Windows — available now** (PowerShell & cmd) · macOS — coming soon · Linux — coming soon
 
-[Documentation](https://stackenv.dev) · [Examples](examples) · [Changelog](https://stackenv.dev/changelog.html)
+[Documentation](https://sanayavo.com/stack/) · [Examples](examples) · [Changelog](https://sanayavo.com/stack/changelog.html)
+
+*(Docs are temporarily hosted at sanayavo.com/stack/ until the stackenv.dev domain is purchased and DNS'd — the site itself already has stackenv.dev wired via CNAME, so this link will move without any content changes once that's done.)*
 
 ## Quick look
 
@@ -48,10 +50,12 @@ service+version shares one running instance, isolated by schema.
 ## Install
 
 ```shell
-winget install stack.cli
+irm https://github.com/sanayasfp/stack/releases/download/v0.1.0/stack-installer.ps1 | iex
 ```
 
-or `scoop`, `choco`, `cargo install stackenv` (published under `stackenv` since `stack` was already taken on crates.io — it still installs a `stack` command) — see [Getting Started](https://stackenv.dev/getting-started.html) for all four.
+or `cargo install stackenv` (published under `stackenv` since `stack` was already taken on crates.io — it still installs a `stack` command), or grab the zip directly from the [latest release](https://github.com/sanayasfp/stack/releases/latest).
+
+winget/Scoop/Chocolatey packages are coming soon — not published yet. See [Getting Started](https://sanayavo.com/stack/getting-started.html) for the full list once they land.
 
 Then, once:
 

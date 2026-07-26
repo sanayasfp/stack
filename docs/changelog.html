@@ -40,10 +40,11 @@ main { padding-block: var(--space-8); }
   <main>
     <span class="kicker" style="display:block;font-family:var(--font-heading);font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--color-accent-700);margin-bottom:8px;">Changelog</span>
     <h1>Changelog</h1>
-    <p class="lead">stack hasn't cut a tagged release yet — this page tracks what's actually built and working on the way to v1.0, grouped by area rather than by date. Real dated entries start at v1.0.0.</p>
+    <p class="lead">Grouped by area for this first release, rather than a flat commit list. Future entries will be per-version as changes actually land between releases.</p>
 
     <div class="entry">
-      <span class="entry-tag">Unreleased — building toward v1.0</span>
+      <span class="entry-tag">v0.1.0 — 2026-07-26</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);">First tagged release. <a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.0" target="_blank" rel="noopener">Release notes and downloads on GitHub</a> · <a href="https://crates.io/crates/stackenv" target="_blank" rel="noopener">crates.io</a>.</p>
       <h2>Core orchestration</h2>
       <ul>
         <li>Manifest-driven <code>stack up</code>/<code>stack down</code>: clone-if-missing, language activation, service start/reuse, dev-server spawn, domain routing — in that order.</li>

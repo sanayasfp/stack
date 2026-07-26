@@ -11,7 +11,7 @@ This project's `stack.toml` sets `[run].external = true`. You run
 would without `stack` — same command, same reload workflow. `stack`'s only
 job is validating port 8000 and routing `fastapi-dev.localhost` to it; it
 never spawns or supervises the process. See the docs site's
-[Manifest Reference, "Why `[run].external` exists"](https://stackenv.dev/manifest.html#run-external).
+[Manifest Reference, "Why `[run].external` exists"](https://sanayavo.com/stack/manifest.html#run-external).
 
 ## Run it
 
