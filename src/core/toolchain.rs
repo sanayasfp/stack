@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, anyhow, bail};
 use crate::core::manifest::Language;
 use crate::core::registry::Registry;
+use std::cmp::Ordering;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -39,6 +40,65 @@ fn vfox_version_dir(plugin: &str, version: &str) -> Result<PathBuf, Lookup> {
     Ok(PathBuf::from(path))
 }
 
+// `vfox info <plugin>@<version>` needs an exact match against vfox's own
+// installed key, but a manifest can pin a loose version (e.g. "8.4") that
+// vfox resolves and installs under a more specific concrete key (e.g.
+// "8.4.0-nts") -- `vfox install php@8.4` succeeds and prints that it
+// installed 8.4.0-nts, but a follow-up `vfox info php@8.4` still reports
+// "notfound" because "8.4" was never itself an installed key. Fall back to
+// matching against what's actually installed (`vfox list`) before giving up.
+fn vfox_find_installed(plugin: &str, version: &str) -> Result<PathBuf, Lookup> {
+    match vfox_version_dir(plugin, version) {
+        Ok(dir) => Ok(dir),
+        Err(Lookup::NotRunnable(msg)) => Err(Lookup::NotRunnable(msg)),
+        Err(Lookup::NotInstalled) => {
+            let resolved = vfox_installed_versions(plugin)
+                .into_iter()
+                .filter(|installed| version_matches_prefix(installed, version))
+                .reduce(|best, candidate| if compare_versions(&candidate, &best) == Ordering::Greater { candidate } else { best });
+            match resolved {
+                Some(exact) => vfox_version_dir(plugin, &exact),
+                None => Err(Lookup::NotInstalled),
+            }
+        }
+    }
+}
+
+fn vfox_installed_versions(plugin: &str) -> Vec<String> {
+    let Ok(output) = Command::new("vfox").args(["list", plugin]).output() else {
+        return Vec::new();
+    };
+    if !output.status.success() {
+        return Vec::new();
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|line| line.trim().trim_start_matches(|c: char| c == '-' || c == '>' || c == '*' || c.is_whitespace()).trim().to_string())
+        .filter(|v| !v.is_empty())
+        .collect()
+}
+
+// True if `requested` is `installed` itself, or a dotted/hyphenated prefix
+// of it (so "8.4" matches "8.4.0-nts" but not "8.40.0").
+fn version_matches_prefix(installed: &str, requested: &str) -> bool {
+    installed == requested || installed.strip_prefix(requested).is_some_and(|rest| rest.starts_with('.') || rest.starts_with('-'))
+}
+
+fn compare_versions(a: &str, b: &str) -> Ordering {
+    let segments = |s: &str| -> Vec<String> { s.split(['.', '-']).map(str::to_string).collect() };
+    let (sa, sb) = (segments(a), segments(b));
+    for (x, y) in sa.iter().zip(sb.iter()) {
+        let ord = match (x.parse::<u64>(), y.parse::<u64>()) {
+            (Ok(nx), Ok(ny)) => nx.cmp(&ny),
+            _ => x.cmp(y),
+        };
+        if ord != Ordering::Equal {
+            return ord;
+        }
+    }
+    sa.len().cmp(&sb.len())
+}
+
 fn vfox_install(plugin: &str, version: &str) -> Result<()> {
     println!("installing {plugin}@{version} via vfox...");
     let status = Command::new("vfox")
@@ -52,12 +112,12 @@ fn vfox_install(plugin: &str, version: &str) -> Result<()> {
 }
 
 fn vfox_resolve(plugin: &str, version: &str, binary_name: &str) -> Result<PathBuf> {
-    let dir = match vfox_version_dir(plugin, version) {
+    let dir = match vfox_find_installed(plugin, version) {
         Ok(d) => d,
         Err(Lookup::NotRunnable(msg)) => return Err(anyhow!("{msg}")),
         Err(Lookup::NotInstalled) => {
             vfox_install(plugin, version)?;
-            match vfox_version_dir(plugin, version) {
+            match vfox_find_installed(plugin, version) {
                 Ok(d) => d,
                 Err(Lookup::NotRunnable(msg)) => return Err(anyhow!("{msg}")),
                 Err(Lookup::NotInstalled) => {
@@ -148,7 +208,7 @@ pub fn lookup(name: &str, entry: &Language) -> Option<PathBuf> {
     match entry.manager().or_else(|| default_manager(name)) {
         Some("vfox") => {
             let (plugin, binary) = vfox_plugin_and_binary(name, entry);
-            let dir = vfox_version_dir(&plugin, version).ok()?;
+            let dir = vfox_find_installed(&plugin, version).ok()?;
             find_binary(&dir, &binary)
         }
         Some("uv") => uv_python_find(version).ok(),
@@ -200,4 +260,43 @@ fn uv_python_find(version: &str) -> Result<PathBuf, Lookup> {
         return Err(Lookup::NotInstalled);
     }
     Ok(PathBuf::from(path))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_matches_prefix_accepts_dot_and_hyphen_boundaries() {
+        assert!(version_matches_prefix("8.4.0-nts", "8.4"));
+        assert!(version_matches_prefix("24.18.0", "24.18"));
+        assert!(version_matches_prefix("8.4", "8.4"));
+    }
+
+    #[test]
+    fn version_matches_prefix_rejects_same_prefix_without_boundary() {
+        assert!(!version_matches_prefix("8.40.0", "8.4"));
+        assert!(!version_matches_prefix("8.45", "8.4"));
+    }
+
+    #[test]
+    fn version_matches_prefix_rejects_unrelated_versions() {
+        assert!(!version_matches_prefix("8.5.4", "8.4"));
+    }
+
+    #[test]
+    fn compare_versions_orders_numeric_segments_numerically() {
+        assert_eq!(compare_versions("8.9.0", "8.10.0"), Ordering::Less);
+        assert_eq!(compare_versions("8.10.0", "8.9.0"), Ordering::Greater);
+    }
+
+    #[test]
+    fn compare_versions_prefers_more_specific_when_equal_prefix() {
+        assert_eq!(compare_versions("8.4.0", "8.4"), Ordering::Greater);
+    }
+
+    #[test]
+    fn compare_versions_falls_back_to_string_compare_for_non_numeric_segments() {
+        assert_eq!(compare_versions("8.4.0-nts", "8.4.0-nts"), Ordering::Equal);
+    }
 }
