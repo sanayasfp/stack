@@ -43,6 +43,24 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.1.6 — 2026-07-26</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.6" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
+      <h2>Added</h2>
+      <ul>
+        <li><code>port</code> fields in <code>[service.*]</code> and <code>[run]</code> now accept a quoted <code>"{VAR}"</code> placeholder (e.g. <code>port = "{MEILISEARCH_PORT}"</code>), resolved the same way <code>command</code> placeholders already are (environment, then an interactive prompt with <code>--prompt</code>). Previously only a literal number was valid — quoting a placeholder there failed with a raw TOML type error before stack's own resolution logic ever ran.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
+      <span class="entry-tag">v0.1.5 — 2026-07-26</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.5" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
+      <h2>Fixed</h2>
+      <ul>
+        <li>Every CLI command and argument now has real help text. <code>stack --help</code> and <code>stack &lt;command&gt; --help</code> previously showed blank descriptions for every command, argument, and flag — the doc comments existed in the source but had never actually been committed, so no prior release shipped them.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.4 — 2026-07-26</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.4" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
       <h2>Fixed</h2>
