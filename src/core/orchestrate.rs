@@ -151,6 +151,16 @@ fn handle_external_service(engine: &str, svc: &Service, port: u16) -> Result<()>
     Ok(())
 }
 
+// `command` strings are tokenized with shell_words::split before spawning
+// (see process::spawn), which follows POSIX escaping rules: backslash is an
+// escape character there, not a path separator. A raw Windows path like
+// `C:\Scripts\meilisearch\meilisearch.exe` gets silently mangled into
+// `C:Scriptsmeilisearchmeilisearch.exe` by that split. Windows accepts `/`
+// interchangeably, so normalizing survives the split intact.
+fn shell_safe_path(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
 fn start_service_if_needed(state: &mut State, engine: &str, svc: &Service, allow_prompt: bool) -> Result<(u32, u16, bool)> {
     svc.validate(engine)?;
     let state_key = format!("{engine}@{}", svc.version);
@@ -200,8 +210,8 @@ fn start_service_if_needed(state: &mut State, engine: &str, svc: &Service, allow
     std::fs::create_dir_all(&data_dir).with_context(|| format!("failed to create data directory {}", data_dir.display()))?;
 
     let mut reserved = BTreeMap::new();
-    reserved.insert("path".to_string(), path.clone());
-    reserved.insert("data_dir".to_string(), data_dir.display().to_string());
+    reserved.insert("path".to_string(), shell_safe_path(&path));
+    reserved.insert("data_dir".to_string(), shell_safe_path(&data_dir.display().to_string()));
     reserved.insert("port".to_string(), port.to_string());
 
     let resolved_command =
@@ -1221,6 +1231,20 @@ mod tests {
     fn match_known_service_returns_none_for_unrelated_names() {
         assert_eq!(match_known_service("Spooler"), None);
         assert_eq!(match_known_service("WindowsUpdate"), None);
+    }
+
+    #[test]
+    fn shell_safe_path_converts_backslashes_so_shell_words_does_not_mangle_them() {
+        let raw = r"C:\Scripts\meilisearch\meilisearch.exe";
+        let safe = shell_safe_path(raw);
+        assert_eq!(safe, "C:/Scripts/meilisearch/meilisearch.exe");
+        let parts = shell_words::split(&format!("{safe} --flag")).unwrap();
+        assert_eq!(parts[0], "C:/Scripts/meilisearch/meilisearch.exe");
+    }
+
+    #[test]
+    fn shell_safe_path_is_noop_for_already_forward_slashed_paths() {
+        assert_eq!(shell_safe_path("C:/tools/mysqld.exe"), "C:/tools/mysqld.exe");
     }
 
     #[test]
