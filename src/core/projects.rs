@@ -1,9 +1,3 @@
-//! `~/.stack/projects.json` — records what languages/services each known project
-//! declares, updated on every successful `stack up`. `stack prune` (PLAN.md section
-//! 7) uses this to tell "installed but referenced by nothing" apart from "installed
-//! and still in use" — re-reading each project's live `stack.toml` when its directory
-//! still exists (more accurate than trusting this cached snapshot), falling back to
-//! the snapshot only when the manifest itself can't be read.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

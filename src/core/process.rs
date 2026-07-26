@@ -6,30 +6,18 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-/// The shared shape behind both `[run].command` and `[service.*].command` — a
-/// resolved (placeholders already substituted) command string, spawned as a child
-/// process, PID-tracked in state.json, and torn down later via the same
-/// process-tree-kill logic. One-shot commands (`git clone`, `vfox install`) don't go
-/// through this — they don't need PID tracking, just run-to-completion.
 pub struct Runnable<'a> {
     pub resolved_command: &'a str,
     pub cwd: &'a Path,
     pub extra_env: &'a BTreeMap<String, String>,
-    /// Identifies this process for its log file name — see `log_path`.
     pub name: &'a str,
 }
 
-/// `~/.stack/logs/<name>.log` — spawned processes are detached from the launching
-/// terminal (see `platform::detach`), so they have no console to inherit
-/// stdout/stderr from; this is where that output actually goes instead.
 pub fn log_path(name: &str) -> PathBuf {
     let base = dirs::home_dir().expect("could not resolve home directory");
     base.join(".stack").join("logs").join(format!("{name}.log"))
 }
 
-/// Everything here is OS-agnostic (command parsing, log-file setup, env building) up
-/// until the single call to `platform::detach`, which is the one truly
-/// platform-specific mutation needed before spawning.
 pub fn spawn(runnable: &Runnable) -> Result<u32> {
     let parts = shell_words::split(runnable.resolved_command)
         .with_context(|| format!("could not parse command '{}'", runnable.resolved_command))?;
@@ -94,7 +82,5 @@ pub fn record_external_run(state: &mut State, name: &str, port: u16, domain: Opt
 }
 
 fn now_iso8601() -> String {
-    // Avoids pulling in a datetime crate for one timestamp field — state.json is
-    // stack's own bookkeeping, not something a human is expected to parse by hand.
     format!("{:?}", std::time::SystemTime::now())
 }

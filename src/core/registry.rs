@@ -1,10 +1,3 @@
-//! `~/.stack/registry.json` — the source of truth for BYO `service`/`tool`/`language`
-//! paths reused across projects (PLAN.md section 7), plus registry-based `external`
-//! service adoption. Languages are the one case worth being explicit about: vfox/uv
-//! already own version-resolution state for anything they support, so this registry
-//! only ever gets consulted for a `[language.*]` entry as a *fallback*, when no
-//! manager is inferrable at all (an unknown-name BYO entry) — never a second source of
-//! truth competing with vfox/uv for the languages they already manage.
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -16,10 +9,6 @@ pub struct Registry {
     pub entries: BTreeMap<String, RegistryEntry>,
 }
 
-/// `path` and `external`/`port` are mutually exclusive, matching `[service.*]`'s own
-/// inline-manifest dual mode exactly — `path` is `None` for an external registration,
-/// `external`/`port` are unset for a path-based one. `tool`/`language` entries are
-/// always path-based; only `kind = "service"` ever uses the external shape.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RegistryEntry {
     pub kind: String,
@@ -65,8 +54,6 @@ impl Registry {
         );
     }
 
-    /// Always `kind = "service"` — `external` has no meaning for `tool`/`language`,
-    /// which have no "already running, just connect" concept at all.
     pub fn register_external(&mut self, name: &str, version: &str, port: u16) {
         self.entries.insert(
             key("service", name, version),
@@ -111,9 +98,6 @@ mod tests {
 
     #[test]
     fn old_registry_json_without_external_or_port_still_deserializes() {
-        // Confirms `#[serde(default)]` on `external` (and `port`/`path` being
-        // Option<_>) means an on-disk registry.json written before this dual-mode
-        // change still loads correctly — no migration needed.
         let json = r#"{"entries":{"service:mysql:8.0.35":{"kind":"service","name":"mysql","version":"8.0.35","path":"C:/mysql/mysqld.exe"}}}"#;
         let registry: Registry = serde_json::from_str(json).unwrap();
         let entry = registry.lookup("service", "mysql", "8.0.35").unwrap();

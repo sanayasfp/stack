@@ -1,15 +1,8 @@
-//! Format-preserving mutation of `stack.toml` for `stack add`/`stack remove` — uses
-//! `toml_edit` (an AST that keeps comments/formatting/key order intact), deliberately
-//! kept separate from `manifest.rs`, which only ever does read-only `toml`-crate
-//! parsing for orchestration. Mixing the two libraries' types in one file would blur
-//! two different jobs (reading the schema vs. editing the document as text-with-structure).
 
 use anyhow::{Context, Result, anyhow, bail};
 use std::path::Path;
 use toml_edit::{DocumentMut, Item, Table, table, value};
 
-/// The optional fields `stack add` can set beyond the positional `name [version]` —
-/// which of these apply depends on `kind` (see `add`'s doc comment).
 #[derive(Default)]
 pub struct AddArgs {
     pub schema: Option<String>,
@@ -21,23 +14,12 @@ pub struct AddArgs {
     pub binary: Option<String>,
 }
 
-/// Ensures `parent[key]` is a real `[key]`-style table, creating one if the key is
-/// absent — never the inline-table shape `toml_edit`'s own auto-vivification would
-/// otherwise produce. Verified directly against `toml_edit` 0.25's source: indexing a
-/// missing key via `parent[key]` converts it into a `Value::InlineTable` (`key = { ...
-/// }` on one line), not an `Item::Table`, unless something already explicitly made it
-/// a real table first — which is exactly what this does, before any further indexing
-/// happens.
+// Must construct the table via table() and insert it, not index a missing key
+// directly (parent[key] = ...): toml_edit auto-vivifies a missing key as an
+// inline table (`key = { ... }` on one line), not a real `[key]` header table.
 fn ensure_subtable<'a>(parent: &'a mut Table, key: &str) -> Result<&'a mut Table> {
     if !parent.contains_key(key) {
         let mut new_table = table();
-        // Marked implicit so a table that ends up holding only nested sub-tables
-        // (e.g. `[service]` existing purely to contain `[service.mysql]`) doesn't
-        // print a redundant empty `[service]` header of its own — verified directly
-        // against toml_edit's encoder (`visit_table`'s `is_visible_std_table` check):
-        // an implicit table's header is hidden only when it has no *direct* scalar
-        // values, so this has no effect once a caller inserts one (e.g. `[language]`
-        // gaining a bare `php = "..."` key still prints its own header correctly).
         if let Some(t) = new_table.as_table_mut() {
             t.set_implicit(true);
         }
@@ -58,12 +40,6 @@ fn save(manifest_path: &Path, doc: &DocumentMut) -> Result<()> {
     std::fs::write(manifest_path, doc.to_string()).with_context(|| format!("failed to write {}", manifest_path.display()))
 }
 
-/// Adds or overwrites a `[kind.name]` entry (or, for `language` with no detailed
-/// fields given, the simpler `name = "version"` form every existing manifest already
-/// uses). `[[clone]]` is deliberately not a supported `kind` here — it's an array of
-/// tables with no natural single-key identity the way `language`/`service`/`tool`
-/// (all maps) have, so "add/remove by name" doesn't have an obvious meaning for it;
-/// that needs its own design, not to be shoehorned into this shape.
 pub fn add(manifest_path: &Path, kind: &str, name: &str, version: Option<&str>, extra: &AddArgs) -> Result<()> {
     let mut doc = load(manifest_path)?;
     let root = doc.as_table_mut();
@@ -125,8 +101,6 @@ pub fn add(manifest_path: &Path, kind: &str, name: &str, version: Option<&str>, 
     save(manifest_path, &doc)
 }
 
-/// Removes a `[kind.name]` (or bare `name = ...`) entry — errors clearly if the
-/// section or the entry itself doesn't exist, rather than silently no-op'ing.
 pub fn remove(manifest_path: &Path, kind: &str, name: &str) -> Result<()> {
     if kind == "clone" {
         bail!("stack remove clone isn't supported yet — hand-edit [[clone]] in stack.toml directly for now");

@@ -8,14 +8,6 @@
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="styles.css" />
 <style>
-/* Template scaffolding — page layout and web-scale sizing only; every color,
-   font, radius and shadow comes from styles.css.
-
-   PHASE SCOPE: this page describes Phase 1 only — the Windows-only,
-   unmonetized CLI. No GUI, no pricing, no auto-update claims belong here;
-   those are Phase 2 and aren't built yet. Everything this page currently
-   asserts is either true today or in Phase 1's actual scope — not a
-   Phase 2 promise borrowed early. */
 :root {
   --leading: 24px;
   --half: 12px;
@@ -40,7 +32,6 @@ body { margin: 0; text-wrap: pretty; }
 .caption-rule { height: 1px; border: 0; margin: 0 0 calc(var(--leading) - var(--half));
   background: var(--color-divider); }
 
-/* — hero — */
 .hero { padding: calc(3.5 * var(--leading)) 0 calc(3 * var(--leading)); }
 .display {
   font-family: var(--font-heading); font-weight: var(--font-heading-weight);
@@ -61,7 +52,6 @@ body { margin: 0; text-wrap: pretty; }
 }
 .installline .p { color: var(--color-accent-700); }
 
-/* — the spec sheet — */
 .sheet { padding: calc(2.5 * var(--leading)) 0 calc(2.5 * var(--leading)); }
 .plate { position: relative; border: 1px solid var(--color-divider); }
 .plate > .corner { position: absolute; width: 15px; height: 15px;
@@ -101,7 +91,6 @@ body { margin: 0; text-wrap: pretty; }
   font-size: 13px; line-height: var(--leading);
   color: color-mix(in srgb, var(--color-text) 70%, transparent); }
 
-/* — wireframe feature cells — */
 .features { padding: calc(2.5 * var(--leading)) 0 calc(2.5 * var(--leading)); }
 .features > .caption-rule { margin-bottom: calc(var(--leading) + 8px); }
 .cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(20px, 3vw, 48px);
@@ -121,7 +110,6 @@ body { margin: 0; text-wrap: pretty; }
   color: color-mix(in srgb, var(--color-text) 78%, transparent); }
 .cell-frame a.cell-link { display: inline-block; margin-top: var(--half); font-family: var(--font-heading); font-size: 12.5px; }
 
-/* — terminal split — */
 .split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   gap: var(--leading) clamp(24px, 5vw, 96px); align-items: center;
   padding: calc(2 * var(--leading)) 0 calc(2.5 * var(--leading)); }
@@ -133,7 +121,6 @@ body { margin: 0; text-wrap: pretty; }
 .split-figure { margin: 0; }
 .split-figure .term-body { font-size: 12.5px; }
 
-/* — quote — */
 .quote { padding: calc(2 * var(--leading)) 0 calc(3 * var(--leading)); }
 .quote blockquote {
   font-family: var(--font-heading); font-weight: var(--font-heading-weight);
@@ -144,7 +131,6 @@ body { margin: 0; text-wrap: pretty; }
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
   margin: var(--half) 0 0; }
 
-/* — close — */
 .close { padding: calc(2 * var(--leading)) 0 calc(1.75 * var(--leading)); }
 .close h3 { font-family: var(--font-heading); font-weight: var(--font-heading-weight);
   font-size: 21px; line-height: var(--leading); letter-spacing: 0; margin: 0; }

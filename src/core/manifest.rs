@@ -38,29 +38,15 @@ fn default_clone_path() -> String {
     ".".to_string()
 }
 
-/// One `[language.<name>]` entry. Untagged so the common case stays a bare version
-/// string (`php = "8.3.1"`) while still allowing a full table when a non-default
-/// manager, a BYO path, or an override is needed — the same union-of-bare-value-or-
-/// table shape `Cargo.toml`'s own `[dependencies]` already uses (`foo = "1.0"` vs
-/// `foo = { version = "1.0", features = [...] }`), not a novel pattern.
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 pub enum Language {
     Simple(String),
     Detailed {
         version: Option<String>,
-        /// "vfox" | "uv" — inferred for php/node/python if omitted (see
-        /// `toolchain::resolve`'s `default_manager`), required explicitly for
-        /// anything else.
         manager: Option<String>,
-        /// vfox plugin name override — defaults to the `[language.<name>]` key
-        /// itself (works for anything vfox already has a plugin for, e.g. `rust`),
-        /// only needed when the plugin name differs (e.g. `node` -> vfox's `nodejs`).
         plugin: Option<String>,
-        /// Binary filename override — defaults to `{name}{EXE_SUFFIX}`.
         binary: Option<String>,
-        /// BYO — a fixed, already-resolved binary path. Bypasses any manager
-        /// entirely, the same inline-path escape hatch `Service.path` already has.
         path: Option<String>,
     },
 }
@@ -108,39 +94,24 @@ pub struct Service {
     pub schema: Option<String>,
     pub port: Option<u16>,
     pub command: Option<String>,
-    /// BYO binary path (inline mode only — registry-based resolution via
-    /// `stack register` isn't implemented yet, see PLAN.md section 7).
     pub path: Option<String>,
-    /// Adopts an already-running instance (Windows Service, Laragon, started by
-    /// hand) instead of starting/managing one — see PLAN.md section 10.
     #[serde(default)]
     pub external: bool,
 }
 
 impl Service {
-    /// Defaults to the project name when unset — the schema usually just matches
-    /// the project anyway, so typing it a second time is redundant in the common
-    /// case.
     pub fn resolve_schema(&self, project_name: &str) -> String {
         self.schema.clone().unwrap_or_else(|| project_name.to_string())
     }
 
-    /// Defaults to the engine's conventional port when unset. `engine` is the
-    /// `[service.<engine>]` key, e.g. "mysql" — not a field on `Service` itself.
     pub fn resolve_port(&self, engine: &str) -> Option<u16> {
         self.port.or_else(|| conventional_port(engine))
     }
 
-    /// Defaults to a built-in per-engine start command when unset — required
-    /// (returns `None`) for anything that isn't one of the three known engines,
-    /// since stack has no built-in knowledge of how to start an arbitrary service.
     pub fn resolve_command(&self, engine: &str) -> Option<String> {
         self.command.clone().or_else(|| default_command(engine).map(str::to_string))
     }
 
-    /// `external = true` means stack only ever connects to this service, never
-    /// starts or stops it — `path`/`command` (both about *starting* it) being set
-    /// at the same time is a real conflict, not something to silently ignore.
     pub fn validate(&self, engine: &str) -> Result<()> {
         if self.external && (self.path.is_some() || self.command.is_some()) {
             bail!("[service.{engine}] can't set path/command when external = true — stack only connects to it, never starts it");
@@ -158,8 +129,6 @@ fn conventional_port(engine: &str) -> Option<u16> {
     }
 }
 
-/// `{path}`/`{data_dir}`/`{port}` are resolved the same way as any other command
-/// placeholder (see the `placeholder` module) once service orchestration exists.
 fn default_command(engine: &str) -> Option<&'static str> {
     match engine {
         "mysql" => Some("{path} --datadir={data_dir} --port={port}"),
@@ -175,11 +144,6 @@ pub struct Run {
     pub port: Option<u16>,
     #[serde(default = "default_cwd")]
     pub cwd: String,
-    /// The developer starts this dev server themselves (e.g. in a terminal with the
-    /// shell hook active) — `stack up` never spawns or tracks a process for it, only
-    /// validates/records the port so routing can still point at it. See PLAN.md's
-    /// `[run].external` section for the rationale (hot-reload-fragile dev servers,
-    /// e.g. `uvicorn --reload` on Windows, that misbehave when wrapped by anything).
     #[serde(default)]
     pub external: bool,
 }
@@ -189,10 +153,6 @@ fn default_cwd() -> String {
 }
 
 impl Run {
-    /// Validates the `external`/`command`/`port` combination up front, with a clear
-    /// error per case rather than silently ignoring a field that doesn't apply — same
-    /// "loud, not silent" taste as placeholder resolution and `[[clone]]`'s
-    /// never-overwrite rule elsewhere in this project.
     pub fn validate(&self) -> Result<()> {
         if self.external {
             if self.command.is_some() {
@@ -208,12 +168,6 @@ impl Run {
     }
 }
 
-/// BYO `path` (unchanged default) or `version` — a small, closed set of tools `stack`
-/// knows how to fetch itself (currently just `composer`) resolves it directly into the
-/// central store, the same dual-mode pattern already used by `[service.*]`/`[language.*]`.
-/// Setting both, or neither, is a conflict/error caught at resolution time
-/// (`orchestrate::resolve_tool`), not here — mirrors how `Language`/`Service` keep
-/// deserialization itself permissive and push validation to where the entry is used.
 #[derive(Debug, Deserialize)]
 pub struct Tool {
     pub path: Option<String>,
@@ -225,9 +179,6 @@ impl Manifest {
         let text = std::fs::read_to_string(path)?;
         let mut manifest: Manifest = toml::from_str(&text)?;
 
-        // [project]/[project].name are both optional — an absent or empty name
-        // defaults to the folder stack.toml lives in, the same convention
-        // `cargo new`/`npm init` already use for their own manifests.
         if manifest.project.name.is_empty() {
             manifest.project.name = path
                 .parent()
@@ -237,10 +188,6 @@ impl Manifest {
                 .to_string();
         }
 
-        // `.localhost` specifically (not `.test`/anything else) is what an RFC 6761
-        // reserved TLD gets you: browsers/OS resolvers already route it to loopback
-        // with zero setup — no hosts file, no local DNS server, unlike `.test` which
-        // is reserved but not auto-resolving.
         if manifest.project.domain.is_none() {
             manifest.project.domain = Some(format!("{}.localhost", manifest.project.name));
         }
@@ -248,7 +195,6 @@ impl Manifest {
         Ok(manifest)
     }
 
-    /// Walk up from `start` looking for a `stack.toml`, the same way git finds `.git`.
     pub fn find_and_load(start: &Path) -> Result<(PathBuf, Self)> {
         let mut dir = std::path::absolute(start)?;
         loop {
@@ -372,8 +318,6 @@ mod tests {
 
     #[test]
     fn language_simple_string_form_parses() {
-        // `Language::Simple` is a bare newtype variant, not valid as a standalone TOML
-        // document — parse it the way it actually appears, as a map value.
         let map: BTreeMap<String, Language> = toml::from_str("php = \"8.3.1\"\n").unwrap();
         let lang = map.get("php").unwrap();
         assert_eq!(lang.version(), Some("8.3.1"));

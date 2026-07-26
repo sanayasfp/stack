@@ -1,10 +1,5 @@
 [project]
 name = "react-frontend"
 
-# No [run] here on purpose. Once `stack setup` has wired the shell hook,
-# entering this folder already puts the pinned Node version first on PATH --
-# so `npm run dev` (run by hand, Herd-style) just works, with nothing for
-# stack to spawn, track, or route. `stack up` isn't part of this project's
-# workflow at all.
 [language]
 node = "20.11.0"

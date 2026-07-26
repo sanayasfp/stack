@@ -10,9 +10,6 @@ pub struct State {
     pub services: BTreeMap<String, ProcessEntry>,
     #[serde(default)]
     pub external_runs: BTreeMap<String, ExternalRunEntry>,
-    /// PID of the caddy daemon, recorded only when `stack` itself started it (an
-    /// already-running instance stack merely reused is left alone, same principle as
-    /// external services/runs). `down --all` kills it once every route is removed.
     #[serde(default)]
     pub caddy_pid: Option<u32>,
 }
@@ -25,11 +22,6 @@ pub struct ProcessEntry {
     pub data_dir: Option<String>,
 }
 
-/// A `[run].external = true` project — routed but never spawned or PID-tracked by
-/// `stack`, so this is deliberately a different shape from `ProcessEntry` rather than
-/// making `pid` optional there (which would ripple `Option<u32>` handling into
-/// `kill_tree`/`is_alive`/`stats`, call sites that otherwise always deal with a real
-/// process stack itself started).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExternalRunEntry {
     pub port: u16,

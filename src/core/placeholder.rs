@@ -1,17 +1,5 @@
 use std::collections::BTreeMap;
 
-/// Resolves `{NAME}` placeholders in a command template.
-///
-/// Order: reserved keywords (stack-controlled, e.g. `{port}`) first and always —
-/// never falls through to env/prompt, so `{PORT}` can never be silently misread as
-/// "look for a PORT env var" instead of the built-in. Then the process environment
-/// (picks up anything already set, including via `stack load-env`). Then, only if
-/// `allow_prompt` is true, an interactive prompt — deliberately opt-in so `stack up`
-/// run non-interactively (CI, a background script) fails fast instead of hanging.
-///
-/// On failure, returns every unresolved name at once rather than just the first —
-/// failing one at a time, fixing, rerunning, is exactly the toil this tool exists to
-/// eliminate elsewhere.
 pub fn resolve(template: &str, reserved: &BTreeMap<String, String>, allow_prompt: bool) -> Result<String, Vec<String>> {
     let names = extract_names(template);
 
@@ -65,8 +53,6 @@ fn extract_names(template: &str) -> Vec<String> {
     names
 }
 
-/// Masks input for placeholder names that look like secrets, so a password isn't
-/// echoed to the terminal.
 fn prompt_for(name: &str) -> String {
     let upper = name.to_uppercase();
     let looks_secret = ["PASSWORD", "SECRET", "TOKEN", "KEY"]
@@ -92,7 +78,6 @@ mod tests {
 
     #[test]
     fn reserved_wins_over_env_of_same_name() {
-        // SAFETY: test runs single-threaded within this process; no other test reads PORT.
         unsafe { std::env::set_var("PORT", "9999") };
         let mut reserved = BTreeMap::new();
         reserved.insert("port".to_string(), "8000".to_string());
