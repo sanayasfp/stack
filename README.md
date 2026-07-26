@@ -11,8 +11,6 @@ ask for.
 
 [Documentation](https://sanayavo.com/stack/) · [Examples](examples) · [Changelog](https://sanayavo.com/stack/changelog.html)
 
-*(Docs are temporarily hosted at sanayavo.com/stack/ until the stackenv.dev domain is purchased and DNS'd — the site itself already has stackenv.dev wired via CNAME, so this link will move without any content changes once that's done.)*
-
 ## Quick look
 
 ```toml
@@ -50,7 +48,7 @@ service+version shares one running instance, isolated by schema.
 ## Install
 
 ```shell
-irm https://github.com/sanayasfp/stack/releases/download/v0.1.0/stack-installer.ps1 | iex
+irm https://github.com/sanayasfp/stack/releases/latest/download/stackenv-installer.ps1 | iex
 ```
 
 or `cargo install stackenv` (published under `stackenv` since `stack` was already taken on crates.io — it still installs a `stack` command), or grab the zip directly from the [latest release](https://github.com/sanayasfp/stack/releases/latest).
