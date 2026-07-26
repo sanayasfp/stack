@@ -43,6 +43,19 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.1.7 — 2026-07-26</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.7" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
+      <h2>Fixed</h2>
+      <ul>
+        <li>A registered service/tool whose path contains backslashes (the normal case on Windows) failed to start with a bogus "program not found" error. The path was fine — <code>stack</code> was tokenizing the resolved command with a POSIX-style shell parser that treats backslash as an escape character, silently corrupting the path first. Affected any registered service with a backslash path, not just one engine.</li>
+      </ul>
+      <h2>Added</h2>
+      <ul>
+        <li><code>stack unregister &lt;kind&gt; &lt;name&gt; &lt;version&gt;</code> — removes a single entry from the global registry directly. Previously the only options were <code>stack register</code> (add) and <code>stack prune</code> (bulk-remove only entries orphaned across every tracked project).</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.6 — 2026-07-26</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.6" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
       <h2>Added</h2>
