@@ -43,6 +43,15 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.1.8 — 2026-07-26</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.8" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
+      <h2>Fixed</h2>
+      <ul>
+        <li>A <code>[language.*]</code> pinned to a loose version (e.g. <code>php = "8.4"</code>, <code>node = "24.18"</code>) could fail to resolve even right after a clean, successful install — <code>vfox install php@8.4</code> would succeed and install the concrete <code>8.4.0-nts</code> build, but the follow-up lookup queried vfox with the original loose string, which was never itself an installed key. Broke both <code>stack up</code> and the ambient per-prompt <code>stack activate</code> for any language pinned this way, cascading into <code>[run].command</code> failing with "program not found". Now falls back to matching vfox's actually-installed versions as a prefix of the requested version when the exact key isn't found.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.7 — 2026-07-26</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.7" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
       <h2>Fixed</h2>
