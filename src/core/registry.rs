@@ -64,6 +64,10 @@ impl Registry {
     pub fn lookup(&self, kind: &str, name: &str, version: &str) -> Option<&RegistryEntry> {
         self.entries.get(&key(kind, name, version))
     }
+
+    pub fn remove(&mut self, kind: &str, name: &str, version: &str) -> Option<RegistryEntry> {
+        self.entries.remove(&key(kind, name, version))
+    }
 }
 
 #[cfg(test)]
@@ -94,6 +98,21 @@ mod tests {
     fn lookup_returns_none_for_unregistered_entry() {
         let registry = Registry::default();
         assert!(registry.lookup("service", "nope", "1.0").is_none());
+    }
+
+    #[test]
+    fn remove_drops_an_existing_entry_and_returns_it() {
+        let mut registry = Registry::default();
+        registry.register_path("tool", "terraform", "1.7.0", "C:/tools/terraform.exe");
+        let removed = registry.remove("tool", "terraform", "1.7.0").unwrap();
+        assert_eq!(removed.path.as_deref(), Some("C:/tools/terraform.exe"));
+        assert!(registry.lookup("tool", "terraform", "1.7.0").is_none());
+    }
+
+    #[test]
+    fn remove_returns_none_for_unregistered_entry() {
+        let mut registry = Registry::default();
+        assert!(registry.remove("service", "nope", "1.0").is_none());
     }
 
     #[test]

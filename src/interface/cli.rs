@@ -70,6 +70,15 @@ enum Command {
         #[arg(long)]
         port: Option<u16>,
     },
+    /// Remove an entry from the global registry (added via `stack register`)
+    Unregister {
+        /// "service", "tool", or "language"
+        kind: String,
+        /// Name of the entry, e.g. "redis"
+        name: String,
+        /// Version to remove — must match exactly what `stack list` reports
+        version: String,
+    },
     /// List installed language toolchains and registered services/tools
     List,
     /// Remove unused toolchains, containers, and orphaned data
@@ -157,6 +166,7 @@ pub fn run() {
         }
         Command::Remove { kind, name } => orchestrate::remove(&kind, &name),
         Command::Register { kind, name, version, path, external, port } => orchestrate::register(&kind, &name, &version, path.as_deref(), external, port),
+        Command::Unregister { kind, name, version } => orchestrate::unregister(&kind, &name, &version),
         Command::List => {
             orchestrate::list();
             Ok(())

@@ -1028,6 +1028,20 @@ pub fn register(kind: &str, name: &str, version: &str, path: Option<&str>, exter
     Ok(())
 }
 
+pub fn unregister(kind: &str, name: &str, version: &str) -> Result<()> {
+    if !matches!(kind, "service" | "tool" | "language") {
+        bail!("unknown kind '{kind}' for stack unregister — supported: service, tool, language");
+    }
+
+    let mut registry = Registry::load();
+    let removed = registry
+        .remove(kind, name, version)
+        .ok_or_else(|| anyhow!("no registered {kind} '{name}' @ {version} — check `stack list` for the exact kind/name/version"))?;
+    registry.save().context("failed to persist registry")?;
+    println!("unregistered {kind} '{name}' @ {version} -> {}", registry_entry_destination(&removed));
+    Ok(())
+}
+
 fn installed_vfox_languages() -> Vec<(String, String)> {
     let mut found = Vec::new();
     let Some(cache_dir) = dirs::home_dir().map(|h| h.join(".vfox").join("cache")) else { return found };
