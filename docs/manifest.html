@@ -119,7 +119,7 @@ manager = "vfox"</pre>
       <tbody>
         <tr><td>version</td><td>string</td><td><em>required</em></td><td>Also the key every other project shares an instance by — same engine+version reuses the one running process.</td></tr>
         <tr><td>schema</td><td>string</td><td><span class="default-tag">project name</span></td><td>Project isolation is by schema/database name, not a separate data directory per project.</td></tr>
-        <tr><td>port</td><td>number</td><td><span class="default-tag">engine default</span></td><td>3306/5432/27017 for mysql/postgres/mongo; required explicitly for any other engine name.</td></tr>
+        <tr><td>port</td><td>number or <code>"{VAR}"</code></td><td><span class="default-tag">engine default</span></td><td>3306/5432/27017 for mysql/postgres/mongo; required explicitly for any other engine name. A quoted <code>"{VAR}"</code> resolves from the environment (or an interactive prompt with <code>--prompt</code>) the same way <code>command</code> placeholders do — see below.</td></tr>
         <tr><td>command</td><td>string</td><td><span class="default-tag">engine default</span></td><td>Built in for mysql/postgres/mongo; required for anything else. <code>{port}</code>/<code>{data_dir}</code>/<code>{path}</code> placeholders available.</td></tr>
         <tr><td>path</td><td>string</td><td>—</td><td>BYO binary, this project only. Omit to resolve by <code>version</code> via <code>stack register</code> instead.</td></tr>
         <tr><td>external</td><td>bool</td><td><span class="default-tag">false</span></td><td>Adopt an already-running instance — stack only verifies it's listening, never starts/stops it. Errors if <code>path</code>/<code>command</code> are also set, or if nothing's actually listening.</td></tr>
@@ -140,7 +140,7 @@ schema = "acme_api"   # optional — defaults to the project name</pre>
       <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
       <tbody>
         <tr><td>command</td><td>string</td><td><em>required unless <code>external</code></em></td><td><code>{port}</code> is substituted; <code>PORT</code> is also set as an env var, for anything reading <code>process.env.PORT</code>.</td></tr>
-        <tr><td>port</td><td>number</td><td><span class="default-tag">ephemeral</span></td><td>Pin it if anything (OAuth callback, CORS allowlist, a proxy target) hardcodes the port — stack errors clearly rather than silently picking a different one when it's taken.</td></tr>
+        <tr><td>port</td><td>number or <code>"{VAR}"</code></td><td><span class="default-tag">ephemeral</span></td><td>Pin it if anything (OAuth callback, CORS allowlist, a proxy target) hardcodes the port — stack errors clearly rather than silently picking a different one when it's taken. A quoted <code>"{VAR}"</code> resolves like a <code>command</code> placeholder — see below.</td></tr>
         <tr><td>cwd</td><td>string</td><td><span class="default-tag">project root</span></td><td>Which cloned path the command runs in — matters once <code>[[clone]]</code> has more than one entry.</td></tr>
         <tr><td>external</td><td>bool</td><td><span class="default-tag">false</span></td><td>Run the dev server yourself, in your own terminal — stack only validates the port and routes to it, never spawns or tracks the process. <code>port</code> becomes required. See below.</td></tr>
       </tbody>
@@ -167,8 +167,9 @@ port = 8000</pre>
     </table>
     </div>
 
-    <h2 id="placeholders">Command placeholders</h2>
+    <h2 id="placeholders">Placeholders</h2>
     <p>Any <code>{VAR_NAME}</code> inside a <code>command</code> string resolves in order: reserved keywords (<code>{port}</code>, <code>{data_dir}</code>, <code>{path}</code>) first, then the process environment, then — only with <code>stack up --prompt</code> — an interactive prompt, masked for anything that looks like a secret. Nothing left unresolved fails silently: every unresolved name is reported together, not one at a time.</p>
+    <p>A <code>port</code> field can be a quoted placeholder too — e.g. <code>port = "{MEILISEARCH_PORT}"</code> — resolved the same way (environment, then prompt) and parsed as a number afterward. Reserved keywords aren't available here, since <code>port</code> is itself the thing being resolved; an unquoted number always skips resolution entirely.</p>
 
   </main>
 </div>

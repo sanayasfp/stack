@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
 use crate::core::caddy;
-use crate::core::manifest::{CloneEntry, Manifest, Service, Tool};
+use crate::core::manifest::{self, CloneEntry, Manifest, Service, Tool};
 use crate::core::process::{self, Runnable};
 use crate::core::projects::{ProjectRecord, ProjectsFile};
 use crate::core::registry::Registry;
@@ -158,12 +158,14 @@ fn start_service_if_needed(state: &mut State, engine: &str, svc: &Service, allow
     if let Some(entry) = state.services.get(&state_key) {
         if platform::is_alive(entry.pid) {
             if let Some(port) = entry.port {
-                if let Some(declared) = svc.resolve_port(engine) {
-                    if declared != port {
+                match svc.resolve_port(engine, allow_prompt) {
+                    Ok(Some(declared)) if declared != port => {
                         println!(
                             "  service.{engine}: warning — stack.toml declares port {declared} but the running instance is on {port} (run `stack down --all` then `stack up` to pick up the new value)"
                         );
                     }
+                    Ok(_) => {}
+                    Err(e) => println!("  service.{engine}: warning — could not resolve declared port: {e:#}"),
                 }
                 return Ok((entry.pid, port, false));
             }
@@ -171,7 +173,7 @@ fn start_service_if_needed(state: &mut State, engine: &str, svc: &Service, allow
     }
 
     let port = svc
-        .resolve_port(engine)
+        .resolve_port(engine, allow_prompt)?
         .ok_or_else(|| anyhow!("[service.{engine}].port is required (no built-in default for this engine)"))?;
     if port_in_use(port) {
         bail!(
@@ -368,7 +370,14 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
         let is_external = svc.external || registry_external_port.is_some();
 
         if is_external {
-            let port = match svc.port.or(registry_external_port).or_else(|| svc.resolve_port(engine)) {
+            let declared_port = match svc.port.as_ref().map(|p| p.resolve(allow_prompt)).transpose() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!("  service.{engine}: {e:#}");
+                    continue;
+                }
+            };
+            let port = match declared_port.or(registry_external_port).or_else(|| manifest::conventional_port(engine)) {
                 Some(p) => p,
                 None => {
                     eprintln!(
@@ -405,14 +414,14 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
     run.validate()?;
 
     if run.external {
-        let port = run.port.expect("run.validate() guarantees port is set when external");
+        let port = run.resolve_port(allow_prompt)?.expect("run.validate() guarantees port is set when external");
         handle_external_run(&mut state, &manifest, port);
         return Ok(());
     }
 
     let run_cwd = project_dir.join(&run.cwd);
 
-    let port = match run.port {
+    let port = match run.resolve_port(allow_prompt)? {
         Some(p) => {
             if port_in_use(p) {
                 bail!("port {p} is already in use");

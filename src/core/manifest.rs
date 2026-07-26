@@ -1,4 +1,5 @@
-use anyhow::{Result, bail};
+use crate::core::placeholder;
+use anyhow::{Context, Result, anyhow, bail};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -89,10 +90,30 @@ impl Language {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum PortValue {
+    Literal(u16),
+    Template(String),
+}
+
+impl PortValue {
+    pub fn resolve(&self, allow_prompt: bool) -> Result<u16> {
+        match self {
+            PortValue::Literal(p) => Ok(*p),
+            PortValue::Template(template) => {
+                let resolved = placeholder::resolve(template, &BTreeMap::new(), allow_prompt)
+                    .map_err(|missing| anyhow!("missing required value(s): {}", missing.join(", ")))?;
+                resolved.parse::<u16>().with_context(|| format!("'{template}' resolved to '{resolved}', which isn't a valid port number"))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Service {
     pub version: String,
     pub schema: Option<String>,
-    pub port: Option<u16>,
+    pub port: Option<PortValue>,
     pub command: Option<String>,
     pub path: Option<String>,
     #[serde(default)]
@@ -104,8 +125,11 @@ impl Service {
         self.schema.clone().unwrap_or_else(|| project_name.to_string())
     }
 
-    pub fn resolve_port(&self, engine: &str) -> Option<u16> {
-        self.port.or_else(|| conventional_port(engine))
+    pub fn resolve_port(&self, engine: &str, allow_prompt: bool) -> Result<Option<u16>> {
+        match &self.port {
+            Some(spec) => spec.resolve(allow_prompt).map(Some),
+            None => Ok(conventional_port(engine)),
+        }
     }
 
     pub fn resolve_command(&self, engine: &str) -> Option<String> {
@@ -120,7 +144,7 @@ impl Service {
     }
 }
 
-fn conventional_port(engine: &str) -> Option<u16> {
+pub(crate) fn conventional_port(engine: &str) -> Option<u16> {
     match engine {
         "mysql" => Some(3306),
         "postgres" | "postgresql" => Some(5432),
@@ -141,7 +165,7 @@ fn default_command(engine: &str) -> Option<&'static str> {
 #[derive(Debug, Deserialize)]
 pub struct Run {
     pub command: Option<String>,
-    pub port: Option<u16>,
+    pub port: Option<PortValue>,
     #[serde(default = "default_cwd")]
     pub cwd: String,
     #[serde(default)]
@@ -153,6 +177,10 @@ fn default_cwd() -> String {
 }
 
 impl Run {
+    pub fn resolve_port(&self, allow_prompt: bool) -> Result<Option<u16>> {
+        self.port.as_ref().map(|p| p.resolve(allow_prompt)).transpose()
+    }
+
     pub fn validate(&self) -> Result<()> {
         if self.external {
             if self.command.is_some() {
@@ -273,13 +301,35 @@ mod tests {
     #[test]
     fn service_port_defaults_to_conventional_port() {
         let svc: Service = toml::from_str("version = \"8.0.35\"\n").unwrap();
-        assert_eq!(svc.resolve_port("mysql"), Some(3306));
-        assert_eq!(svc.resolve_port("postgres"), Some(5432));
-        assert_eq!(svc.resolve_port("mongo"), Some(27017));
-        assert_eq!(svc.resolve_port("redis"), None);
+        assert_eq!(svc.resolve_port("mysql", false).unwrap(), Some(3306));
+        assert_eq!(svc.resolve_port("postgres", false).unwrap(), Some(5432));
+        assert_eq!(svc.resolve_port("mongo", false).unwrap(), Some(27017));
+        assert_eq!(svc.resolve_port("redis", false).unwrap(), None);
 
         let svc_explicit: Service = toml::from_str("version = \"1\"\nport = 9999\n").unwrap();
-        assert_eq!(svc_explicit.resolve_port("mysql"), Some(9999));
+        assert_eq!(svc_explicit.resolve_port("mysql", false).unwrap(), Some(9999));
+    }
+
+    #[test]
+    fn service_port_template_resolves_from_env_var() {
+        unsafe { std::env::set_var("STACK_TEST_MEILI_PORT", "7700") };
+        let svc: Service = toml::from_str("version = \"1\"\nport = \"{STACK_TEST_MEILI_PORT}\"\n").unwrap();
+        assert_eq!(svc.resolve_port("meilisearch", false).unwrap(), Some(7700));
+        unsafe { std::env::remove_var("STACK_TEST_MEILI_PORT") };
+    }
+
+    #[test]
+    fn service_port_template_missing_env_var_errors_without_prompt() {
+        let svc: Service = toml::from_str("version = \"1\"\nport = \"{STACK_TEST_DEFINITELY_UNSET_PORT}\"\n").unwrap();
+        assert!(svc.resolve_port("meilisearch", false).is_err());
+    }
+
+    #[test]
+    fn service_port_template_non_numeric_value_errors() {
+        unsafe { std::env::set_var("STACK_TEST_BOGUS_PORT", "not-a-number") };
+        let svc: Service = toml::from_str("version = \"1\"\nport = \"{STACK_TEST_BOGUS_PORT}\"\n").unwrap();
+        assert!(svc.resolve_port("meilisearch", false).is_err());
+        unsafe { std::env::remove_var("STACK_TEST_BOGUS_PORT") };
     }
 
     #[test]
