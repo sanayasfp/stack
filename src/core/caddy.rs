@@ -11,7 +11,7 @@ fn route_id(name: &str) -> String {
     format!("stack-{name}")
 }
 
-fn resolve_caddy_binary() -> Result<PathBuf> {
+pub fn resolve_caddy_binary() -> Result<PathBuf> {
     if std::process::Command::new("caddy").arg("version").output().is_ok() {
         return Ok(PathBuf::from("caddy"));
     }

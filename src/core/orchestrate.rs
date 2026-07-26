@@ -668,7 +668,12 @@ pub fn doctor(fix: bool) -> Result<()> {
     let mut all_ok = true;
 
     for tool in ["vfox", "uv", "caddy"] {
-        match check_on_path(tool) {
+        let check = if tool == "caddy" {
+            caddy::resolve_caddy_binary().and_then(|bin| check_on_path(&bin.to_string_lossy()))
+        } else {
+            check_on_path(tool)
+        };
+        match check {
             Ok(version) => {
                 println!("  {tool}: OK ({version})");
                 if let Some(pinned) = crate::core::pinned::pinned_version(tool)
