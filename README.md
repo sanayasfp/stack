@@ -51,7 +51,7 @@ service+version shares one running instance, isolated by schema.
 winget install stack.cli
 ```
 
-or `scoop`, `choco`, `cargo install stack` — see [Getting Started](https://stackenv.dev/getting-started.html) for all four.
+or `scoop`, `choco`, `cargo install stackenv` (published under `stackenv` since `stack` was already taken on crates.io — it still installs a `stack` command) — see [Getting Started](https://stackenv.dev/getting-started.html) for all four.
 
 Then, once:
 
