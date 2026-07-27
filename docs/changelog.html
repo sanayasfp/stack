@@ -43,6 +43,16 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.1.9 — 2026-07-27</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.9" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
+      <h2>Fixed</h2>
+      <ul>
+        <li><code>stack up</code> printed <code>languages</code>/<code>services</code> using Rust's raw debug array format (<code>languages: ["python"]</code>) instead of readable text — now a plain comma-joined list, or <code>(none)</code> when empty.</li>
+        <li>A failed language install left a raw Lua plugin-hook traceback with no indication of how to find a valid version — now points at <code>vfox search &lt;plugin&gt;</code>.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.8 — 2026-07-26</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.8" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
       <h2>Fixed</h2>
