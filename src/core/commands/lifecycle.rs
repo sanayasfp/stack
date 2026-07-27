@@ -296,6 +296,7 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
     }
 
     let mut state = State::load();
+    let mut used_services: Vec<String> = Vec::new();
 
     for (engine, svc) in &manifest.service {
         let registry_external_port: Option<u16> = if svc.path.is_none() && !svc.external {
@@ -335,8 +336,12 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
                     "    schema '{}' — automatic creation not yet implemented; create it manually if needed",
                     svc.resolve_schema(&manifest.project.name)
                 );
+                used_services.push(format!("{engine}@{}", svc.version));
             }
-            Ok((pid, port, false)) => println!("  service.{engine}: already running, shared with other projects (pid {pid}, port {port})"),
+            Ok((pid, port, false)) => {
+                println!("  service.{engine}: already running, shared with other projects (pid {pid}, port {port})");
+                used_services.push(format!("{engine}@{}", svc.version));
+            }
             Err(e) => eprintln!("  service.{engine}: {e:#}"),
         }
     }
@@ -390,7 +395,7 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
     };
 
     let pid = process::spawn(&runnable)?;
-    process::record_project(&mut state, &manifest.project.name, pid, Some(port));
+    process::record_project(&mut state, &manifest.project.name, pid, Some(port), used_services);
     println!("  run: {resolved_command}  (pid {pid}, port {port})");
     println!("  log: {}", process::log_path(&manifest.project.name).display());
     if let Some(domain) = &manifest.project.domain {
@@ -401,8 +406,16 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
     Ok(())
 }
 
+fn find_dependent_project<'a>(projects: &'a BTreeMap<String, crate::core::state::ProcessEntry>, service_key: &str) -> Option<&'a str> {
+    projects.iter().find(|(_, other)| other.services.iter().any(|s| s == service_key)).map(|(name, _)| name.as_str())
+}
+
 pub fn down(project: Option<String>, all: bool) -> Result<()> {
-    let mut state = State::load();
+    // Self-healed, not a raw load: a dead project's stale `services` list
+    // must be gone before the reference check below runs, or an already-dead
+    // project can look like a live dependent and keep an orphaned service
+    // running forever.
+    let mut state = load_and_heal_state();
 
     if all {
         for (name, entry) in std::mem::take(&mut state.projects) {
@@ -441,6 +454,22 @@ pub fn down(project: Option<String>, all: bool) -> Result<()> {
             match platform::kill_tree(entry.pid) {
                 Ok(()) => println!("stopped {name} (pid {})", entry.pid),
                 Err(e) => eprintln!("{name}: {e:#}"),
+            }
+            // `entry` is already removed from state.projects above, so this
+            // scan over what's left is naturally "every *other* running
+            // project" -- a live query, not a stored count, so there's
+            // nothing to keep in sync as projects come and go.
+            for service_key in &entry.services {
+                if let Some(other_name) = find_dependent_project(&state.projects, service_key) {
+                    println!("  {service_key} also in use by '{other_name}' — leaving it running");
+                    continue;
+                }
+                if let Some(service_entry) = state.services.remove(service_key) {
+                    match platform::kill_tree(service_entry.pid) {
+                        Ok(()) => println!("  stopped service {service_key} (pid {})", service_entry.pid),
+                        Err(e) => eprintln!("  {service_key}: {e:#}"),
+                    }
+                }
             }
         } else if let Some(entry) = state.external_runs.remove(&name) {
             if let Err(e) = caddy::remove_route(&name) {
@@ -594,5 +623,38 @@ mod tests {
     #[test]
     fn shell_safe_path_is_noop_for_already_forward_slashed_paths() {
         assert_eq!(shell_safe_path("C:/tools/mysqld.exe"), "C:/tools/mysqld.exe");
+    }
+
+    fn fake_project_entry(services: &[&str]) -> crate::core::state::ProcessEntry {
+        crate::core::state::ProcessEntry {
+            pid: 1,
+            port: None,
+            started_at: String::new(),
+            data_dir: None,
+            services: services.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn find_dependent_project_finds_another_project_still_using_the_service() {
+        let mut projects = BTreeMap::new();
+        projects.insert("project-a".to_string(), fake_project_entry(&["mysql@8.0"]));
+        projects.insert("project-b".to_string(), fake_project_entry(&["mysql@8.0", "redis@7.0"]));
+
+        assert_eq!(find_dependent_project(&projects, "mysql@8.0"), Some("project-a"));
+    }
+
+    #[test]
+    fn find_dependent_project_returns_none_when_nobody_else_uses_it() {
+        let mut projects = BTreeMap::new();
+        projects.insert("project-b".to_string(), fake_project_entry(&["redis@7.0"]));
+
+        assert_eq!(find_dependent_project(&projects, "mysql@8.0"), None);
+    }
+
+    #[test]
+    fn find_dependent_project_returns_none_for_empty_projects() {
+        let projects = BTreeMap::new();
+        assert_eq!(find_dependent_project(&projects, "mysql@8.0"), None);
     }
 }

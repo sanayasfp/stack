@@ -46,7 +46,7 @@ pub fn spawn(runnable: &Runnable) -> Result<u32> {
     Ok(child.id())
 }
 
-pub fn record_project(state: &mut State, name: &str, pid: u32, port: Option<u16>) {
+pub fn record_project(state: &mut State, name: &str, pid: u32, port: Option<u16>, services: Vec<String>) {
     state.projects.insert(
         name.to_string(),
         ProcessEntry {
@@ -54,6 +54,7 @@ pub fn record_project(state: &mut State, name: &str, pid: u32, port: Option<u16>
             port,
             started_at: now_iso8601(),
             data_dir: None,
+            services,
         },
     );
 }
@@ -66,6 +67,7 @@ pub fn record_service(state: &mut State, key: &str, pid: u32, port: Option<u16>,
             port,
             started_at: now_iso8601(),
             data_dir,
+            services: Vec::new(),
         },
     );
 }
