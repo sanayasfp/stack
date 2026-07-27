@@ -43,6 +43,15 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.1.10 — 2026-07-27</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.10" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
+      <h2>Changed</h2>
+      <ul>
+        <li>Internal: split the single 1300+ line command file into <code>core/commands/{lifecycle, scaffold, registry_commands, shell_integration}.rs</code>, grouped along the structure already implicit in the CLI. Pure refactor — nothing about how <code>stack</code> behaves changes in this version.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.9 — 2026-07-27</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.9" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
       <h2>Fixed</h2>
