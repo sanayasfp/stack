@@ -1,8 +1,8 @@
 pub mod caddy;
+pub mod commands;
 pub mod constants;
 pub mod manifest;
 pub mod manifest_edit;
-pub mod orchestrate;
 pub mod pinned;
 pub mod placeholder;
 pub mod process;

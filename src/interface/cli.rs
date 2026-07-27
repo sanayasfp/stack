@@ -1,4 +1,4 @@
-use crate::core::orchestrate;
+use crate::core::commands::{lifecycle, registry_commands, scaffold, shell_integration};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -160,38 +160,38 @@ pub fn run() {
     let cli = Cli::parse();
 
     let result: anyhow::Result<()> = match cli.command {
-        Command::New { target } => orchestrate::new_project(&target),
+        Command::New { target } => scaffold::new_project(&target),
         Command::Add { kind, name, version, schema, port, command, path, manager, plugin, binary } => {
-            orchestrate::add(&kind, &name, version, schema, port, command, path, manager, plugin, binary)
+            scaffold::add(&kind, &name, version, schema, port, command, path, manager, plugin, binary)
         }
-        Command::Remove { kind, name } => orchestrate::remove(&kind, &name),
-        Command::Register { kind, name, version, path, external, port } => orchestrate::register(&kind, &name, &version, path.as_deref(), external, port),
-        Command::Unregister { kind, name, version } => orchestrate::unregister(&kind, &name, &version),
+        Command::Remove { kind, name } => scaffold::remove(&kind, &name),
+        Command::Register { kind, name, version, path, external, port } => registry_commands::register(&kind, &name, &version, path.as_deref(), external, port),
+        Command::Unregister { kind, name, version } => registry_commands::unregister(&kind, &name, &version),
         Command::List => {
-            orchestrate::list();
+            registry_commands::list();
             Ok(())
         }
-        Command::Prune { yes, purge_data } => orchestrate::prune(yes, purge_data),
-        Command::LoadEnv { path } => orchestrate::load_env(path),
-        Command::Up { dir, prompt } => orchestrate::up(&dir, prompt),
-        Command::Down { project, all } => orchestrate::down(project, all),
+        Command::Prune { yes, purge_data } => registry_commands::prune(yes, purge_data),
+        Command::LoadEnv { path } => shell_integration::load_env(path),
+        Command::Up { dir, prompt } => lifecycle::up(&dir, prompt),
+        Command::Down { project, all } => lifecycle::down(project, all),
         Command::Status => {
-            orchestrate::status();
+            lifecycle::status();
             Ok(())
         }
         Command::Stats { no_stream } => {
-            orchestrate::stats(no_stream);
+            lifecycle::stats(no_stream);
             Ok(())
         }
-        Command::Logs { name, follow, tail } => orchestrate::logs(name, follow, tail),
-        Command::Doctor { fix } => orchestrate::doctor(fix),
-        Command::Hook { shell } => orchestrate::hook(&shell),
+        Command::Logs { name, follow, tail } => lifecycle::logs(name, follow, tail),
+        Command::Doctor { fix } => shell_integration::doctor(fix),
+        Command::Hook { shell } => shell_integration::hook(&shell),
         Command::Activate { shell } => {
-            orchestrate::activate(&shell);
+            shell_integration::activate(&shell);
             Ok(())
         }
         Command::Setup { shell } => {
-            orchestrate::setup(&shell);
+            shell_integration::setup(&shell);
             Ok(())
         }
     };
