@@ -106,7 +106,7 @@ fn vfox_install(plugin: &str, version: &str) -> Result<()> {
         .status()
         .context("failed to run vfox install")?;
     if !status.success() {
-        bail!("vfox install {plugin}@{version} failed");
+        bail!("vfox install {plugin}@{version} failed — run `vfox search {plugin}` to see available versions");
     }
     Ok(())
 }
