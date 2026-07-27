@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
 use crate::core::caddy;
+use crate::core::constants::STACK_ACCENT_RGB;
 use crate::core::manifest::{self, CloneEntry, Manifest, Service, Tool};
 use crate::core::process::{self, Runnable};
 use crate::core::projects::{ProjectRecord, ProjectsFile};
@@ -822,8 +823,6 @@ pub fn activate(shell: &str) {
         _ => {}
     }
 }
-
-const STACK_ACCENT_RGB: (u8, u8, u8) = (0x3f, 0xc7, 0xae);
 
 fn print_active_indicator(shell: &str) {
     let (r, g, b) = STACK_ACCENT_RGB;

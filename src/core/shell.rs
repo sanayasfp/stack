@@ -1,11 +1,10 @@
 
+use crate::core::constants::STACK_ACCENT_RGB;
 use anyhow::{Context, Result, anyhow, bail};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 const HOOK_MARKER: &str = "# stack shell hook";
-
-const STACK_ACCENT_RGB: (u8, u8, u8) = (0x3f, 0xc7, 0xae);
 
 pub fn profile_path(shell: &str) -> Result<PathBuf> {
     match shell {
