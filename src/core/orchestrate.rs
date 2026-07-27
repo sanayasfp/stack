@@ -12,6 +12,11 @@ use crate::platform;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+fn join_names<'a>(names: impl Iterator<Item = &'a String>) -> String {
+    let joined: Vec<&str> = names.map(String::as_str).collect();
+    if joined.is_empty() { "(none)".to_string() } else { joined.join(", ") }
+}
+
 fn print_version(binary: &Path, label: &str) {
     match std::process::Command::new(binary).arg("--version").output() {
         Ok(output) => {
@@ -343,8 +348,8 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
     if let Some(domain) = &manifest.project.domain {
         println!("  domain: {domain}");
     }
-    println!("  languages: {:?}", manifest.language.keys().collect::<Vec<_>>());
-    println!("  services: {:?}", manifest.service.keys().collect::<Vec<_>>());
+    println!("  languages: {}", join_names(manifest.language.keys()));
+    println!("  services: {}", join_names(manifest.service.keys()));
 
     process_clones(&project_dir, &manifest.clones)?;
 
