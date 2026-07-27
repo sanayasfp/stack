@@ -1,6 +1,6 @@
 [package]
 name = "stackenv"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2024"
 authors = ["sanayasfp"]
 description = "Native, zero-container multi-project dev environment manager. No Docker, no VMs."
