@@ -43,6 +43,15 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.1.11 — 2026-07-27</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.11" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
+      <h2>Fixed</h2>
+      <ul>
+        <li><code>stack down</code> had no middle ground between stopping just a project's own <code>[run]</code> process and <code>--all</code> (every running project on the machine). Plain <code>stack down</code> now also stops any service the project declared — but only once no other currently running project still needs it, checked live at the moment you run it. If another project still depends on it, it's left running with a message naming which one.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.10 — 2026-07-27</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.10" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
       <h2>Changed</h2>
