@@ -43,6 +43,15 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.1.13 — 2026-07-28</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.13" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
+      <h2>Fixed</h2>
+      <ul>
+        <li>Static assets (CSS, JS, fonts, images) on PHP projects using the v0.1.12 FastCGI default were being routed through <code>php-cgi</code> instead of served directly, coming back with the wrong <code>Content-Type</code> — browsers silently accept that for scripts but strictly refuse it for stylesheets, so any project relying on Caddy to serve its own static files (plain PHP, WordPress, phpMyAdmin) rendered completely unstyled. The FastCGI route now only proxies <code>*.php</code> requests and serves everything else directly, matching Caddy's own documented expansion of its <code>php_fastcgi</code> directive.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.12 — 2026-07-28</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.12" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
       <h2>Added</h2>
