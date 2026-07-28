@@ -352,7 +352,8 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
         println!("(no [run] — nothing spawned or routed)");
         return Ok(());
     };
-    run.validate()?;
+    let has_php = manifest.language.contains_key("php");
+    run.validate(has_php)?;
 
     if run.external {
         let port = run.resolve_port(allow_prompt)?.expect("run.validate() guarantees port is set when external");
@@ -372,20 +373,47 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
         None => allocate_ephemeral_port().context("failed to allocate a port")?,
     };
 
-    let mut reserved = BTreeMap::new();
-    reserved.insert("port".to_string(), port.to_string());
-
-    let command = run.command.as_ref().expect("run.validate() guarantees command is set when not external");
-    let resolved_command = placeholder::resolve(command, &reserved, allow_prompt).map_err(|missing| {
-        anyhow!(
-            "missing required value(s): {}\n        pass --prompt to be asked interactively, or set them in your environment (see `stack load-env`)",
-            missing.join(", ")
-        )
-    })?;
-
-    let mut extra_env = BTreeMap::new();
-    extra_env.insert("PORT".to_string(), port.to_string());
-    extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries));
+    // No [run].command written and [language.php] declared: default to
+    // stack's own FastCGI execution (php-cgi.exe, real concurrent worker
+    // processes) instead of requiring the user to spell out a command --
+    // the same "sensible default when omitted" pattern [service.*] already
+    // has for mysql/postgres/mongo, just for [run] specifically.
+    let (resolved_command, extra_env, php_docroot) = match &run.command {
+        Some(command) => {
+            let mut reserved = BTreeMap::new();
+            reserved.insert("port".to_string(), port.to_string());
+            let resolved_command = placeholder::resolve(command, &reserved, allow_prompt).map_err(|missing| {
+                anyhow!(
+                    "missing required value(s): {}\n        pass --prompt to be asked interactively, or set them in your environment (see `stack load-env`)",
+                    missing.join(", ")
+                )
+            })?;
+            let mut extra_env = BTreeMap::new();
+            extra_env.insert("PORT".to_string(), port.to_string());
+            extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries));
+            (resolved_command, extra_env, None)
+        }
+        None => {
+            let php_entry = manifest.language.get("php").expect("run.validate() guarantees [language.php] when command is omitted");
+            let php_binary = toolchain::resolve("php", php_entry)?;
+            let php_cgi = php_cgi_binary(&php_binary);
+            if !php_cgi.is_file() {
+                bail!(
+                    "php-cgi{} not found next to {} — expected in every official PHP build; set [run].command explicitly if this PHP install is non-standard",
+                    std::env::consts::EXE_SUFFIX,
+                    php_binary.display()
+                );
+            }
+            let docroot = detect_php_docroot(&run_cwd);
+            let resolved_command = format!("{} -b 127.0.0.1:{port}", shell_words::quote(&shell_safe_path(&php_cgi.to_string_lossy())));
+            let mut extra_env = BTreeMap::new();
+            extra_env.insert("PORT".to_string(), port.to_string());
+            extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries));
+            extra_env.insert("PHP_FCGI_CHILDREN".to_string(), "4".to_string());
+            extra_env.insert("PHP_FCGI_MAX_REQUESTS".to_string(), "500".to_string());
+            (resolved_command, extra_env, Some(docroot))
+        }
+    };
 
     let runnable = Runnable {
         resolved_command: &resolved_command,
@@ -399,11 +427,36 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
     println!("  run: {resolved_command}  (pid {pid}, port {port})");
     println!("  log: {}", process::log_path(&manifest.project.name).display());
     if let Some(domain) = &manifest.project.domain {
-        route_project(&mut state, &manifest.project.name, domain, port);
+        match &php_docroot {
+            Some(docroot) => route_project_fastcgi(&mut state, &manifest.project.name, domain, port, docroot),
+            None => route_project(&mut state, &manifest.project.name, domain, port),
+        }
     }
     save_state(&state);
 
     Ok(())
+}
+
+fn php_cgi_binary(php_binary: &Path) -> PathBuf {
+    php_binary.with_file_name(format!("php-cgi{}", std::env::consts::EXE_SUFFIX))
+}
+
+// Laravel/Symfony keep index.php in `public/`; plain PHP, WordPress, and
+// phpMyAdmin keep it at the project root. Checking which one actually has
+// the file means the manifest never has to say which kind of project it is.
+fn detect_php_docroot(run_cwd: &Path) -> String {
+    let public_dir = run_cwd.join("public");
+    if public_dir.join("index.php").is_file() { public_dir.display().to_string() } else { run_cwd.display().to_string() }
+}
+
+fn route_project_fastcgi(state: &mut State, name: &str, domain: &str, port: u16, docroot: &str) {
+    match caddy::ensure_running(state) {
+        Ok(()) => match caddy::push_fastcgi_route(name, domain, port, docroot) {
+            Ok(()) => println!("  routed: http://{domain} -> 127.0.0.1:{port} (fastcgi, root {docroot})"),
+            Err(e) => eprintln!("  warning: failed to push route: {e:#}"),
+        },
+        Err(e) => eprintln!("  warning: could not start/reach caddy for routing: {e:#}"),
+    }
 }
 
 fn find_dependent_project<'a>(projects: &'a BTreeMap<String, crate::core::state::ProcessEntry>, service_key: &str) -> Option<&'a str> {
@@ -618,6 +671,35 @@ mod tests {
         assert_eq!(safe, "C:/Scripts/meilisearch/meilisearch.exe");
         let parts = shell_words::split(&format!("{safe} --flag")).unwrap();
         assert_eq!(parts[0], "C:/Scripts/meilisearch/meilisearch.exe");
+    }
+
+    #[test]
+    fn php_cgi_binary_swaps_filename_next_to_php_exe() {
+        let php = PathBuf::from(r"C:\Users\test\.vfox\cache\php\v-8.4.23\php-8.4.23\php.exe");
+        let cgi = php_cgi_binary(&php);
+        assert_eq!(cgi, PathBuf::from(r"C:\Users\test\.vfox\cache\php\v-8.4.23\php-8.4.23\php-cgi.exe"));
+    }
+
+    #[test]
+    fn detect_php_docroot_prefers_public_when_it_has_an_index() {
+        let dir = std::env::temp_dir().join(format!("stack-docroot-test-public-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("public")).unwrap();
+        std::fs::write(dir.join("public").join("index.php"), "<?php").unwrap();
+
+        assert_eq!(detect_php_docroot(&dir), dir.join("public").display().to_string());
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn detect_php_docroot_falls_back_to_project_root_without_a_public_index() {
+        let dir = std::env::temp_dir().join(format!("stack-docroot-test-root-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("index.php"), "<?php").unwrap();
+
+        assert_eq!(detect_php_docroot(&dir), dir.display().to_string());
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

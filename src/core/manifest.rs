@@ -181,7 +181,11 @@ impl Run {
         self.port.as_ref().map(|p| p.resolve(allow_prompt)).transpose()
     }
 
-    pub fn validate(&self) -> Result<()> {
+    // `has_php`: whether the manifest declares [language.php] -- if so, an
+    // omitted `command` isn't an error, it means "use stack's default PHP
+    // FastCGI execution" instead of requiring the user to spell out a
+    // command by hand.
+    pub fn validate(&self, has_php: bool) -> Result<()> {
         if self.external {
             if self.command.is_some() {
                 bail!("[run].command is ignored when external = true — remove one or the other");
@@ -189,8 +193,8 @@ impl Run {
             if self.port.is_none() {
                 bail!("[run].port is required when external = true — stack has nothing to allocate for a process it isn't starting");
             }
-        } else if self.command.is_none() {
-            bail!("[run].command is required unless external = true");
+        } else if self.command.is_none() && !has_php {
+            bail!("[run].command is required unless external = true, or [language.php] is declared (defaults to stack's PHP FastCGI execution)");
         }
         Ok(())
     }
@@ -343,27 +347,30 @@ mod tests {
     }
 
     #[test]
-    fn run_requires_command_unless_external() {
+    fn run_requires_command_unless_external_or_php() {
         let run: Run = toml::from_str("port = 8000\n").unwrap();
-        assert!(run.validate().is_err());
+        assert!(run.validate(false).is_err());
+        // Same manifest, but [language.php] is declared -- an omitted
+        // command now means "use the default", not an error.
+        assert!(run.validate(true).is_ok());
 
         let run: Run = toml::from_str("command = \"php -S 127.0.0.1:{port}\"\n").unwrap();
-        assert!(run.validate().is_ok());
+        assert!(run.validate(false).is_ok());
     }
 
     #[test]
     fn run_external_rejects_command() {
         let run: Run = toml::from_str("external = true\nport = 8000\ncommand = \"uvicorn --reload\"\n").unwrap();
-        assert!(run.validate().is_err());
+        assert!(run.validate(false).is_err());
     }
 
     #[test]
     fn run_external_requires_port() {
         let run: Run = toml::from_str("external = true\n").unwrap();
-        assert!(run.validate().is_err());
+        assert!(run.validate(false).is_err());
 
         let run: Run = toml::from_str("external = true\nport = 8000\n").unwrap();
-        assert!(run.validate().is_ok());
+        assert!(run.validate(false).is_ok());
     }
 
     #[test]

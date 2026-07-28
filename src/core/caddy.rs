@@ -104,6 +104,48 @@ pub fn push_route(name: &str, domain: &str, port: u16) -> Result<()> {
     Ok(())
 }
 
+// Translated from Caddy's own documented expansion of the `php_fastcgi`
+// Caddyfile directive (checked against the actual fastcgi transport module,
+// which is confirmed compiled into stack's pinned Caddy binary): try the
+// literal requested path first, then that same directory's own index.php
+// (so a real subdirectory index.php wins over the root one), and only
+// fall back to the root index.php last -- the same order nginx's `index`
+// directive or Apache's `DirectoryIndex` would resolve a directory request
+// in, not a blanket "everything goes to one file" rewrite.
+pub fn push_fastcgi_route(name: &str, domain: &str, port: u16, docroot: &str) -> Result<()> {
+    let id = route_id(name);
+    let _ = ureq::delete(format!("{ADMIN_API}/id/{id}")).call();
+
+    let route = serde_json::json!({
+        "@id": id,
+        "match": [{ "host": [domain] }],
+        "handle": [{
+            "handler": "subroute",
+            "routes": [
+                {
+                    "match": [{ "file": {
+                        "root": docroot,
+                        "try_files": ["{http.request.uri.path}", "{http.request.uri.path}/index.php", "index.php"],
+                        "try_policy": "first_exist_fallback"
+                    } }],
+                    "handle": [{ "handler": "rewrite", "uri": "{http.matchers.file.relative}" }]
+                },
+                {
+                    "handle": [{
+                        "handler": "reverse_proxy",
+                        "upstreams": [{ "dial": format!("127.0.0.1:{port}") }],
+                        "transport": { "protocol": "fastcgi", "root": docroot, "split_path": [".php"] }
+                    }]
+                }
+            ]
+        }]
+    });
+    ureq::post(format!("{ADMIN_API}/config/apps/http/servers/srv0/routes"))
+        .send_json(route)
+        .context("failed to push fastcgi route")?;
+    Ok(())
+}
+
 pub fn remove_route(name: &str) -> Result<()> {
     // 404 (route never existed, e.g. stack down on a project that was never
     // routed) is an expected outcome here, not a failure.
