@@ -405,7 +405,19 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
                 );
             }
             let docroot = detect_php_docroot(&run_cwd);
-            let resolved_command = format!("{} -b 127.0.0.1:{port}", shell_words::quote(&shell_safe_path(&php_cgi.to_string_lossy())));
+            // OPcache ships disabled in every official PHP-for-Windows build
+            // (zend_extension=opcache is commented out in the default
+            // php.ini). Without it, php-cgi recompiles the entire framework
+            // and every vendor package from source on every single request
+            // -- confirmed on a real Laravel app, ~350-450ms/request cold vs
+            // ~50-65ms once cached, an order of magnitude. Force it on via
+            // the command line instead of requiring a manual php.ini edit
+            // per PHP install: portable, survives PHP reinstalls/upgrades,
+            // and applies to every project automatically.
+            let resolved_command = format!(
+                "{} -b 127.0.0.1:{port} -d zend_extension=opcache -d opcache.enable=1 -d opcache.enable_cli=1",
+                shell_words::quote(&shell_safe_path(&php_cgi.to_string_lossy()))
+            );
             let mut extra_env = BTreeMap::new();
             extra_env.insert("PORT".to_string(), port.to_string());
             extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries));
