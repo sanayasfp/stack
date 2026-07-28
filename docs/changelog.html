@@ -43,6 +43,15 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.1.12 — 2026-07-28</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.12" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
+      <h2>Added</h2>
+      <ul>
+        <li>Real concurrent PHP execution. <code>php -S</code> can only handle one request at a time — a large database import, several browser tabs, or a frontend firing concurrent API calls all serialize and stall each other. A <code>[run]</code> block on a project with <code>[language.php]</code> declared and no explicit <code>command</code> now defaults to <code>php-cgi.exe</code> running real worker processes, fronted by Caddy's FastCGI transport — genuinely parallel request handling. No new manifest field: write nothing and this is the default; an explicit <code>command</code> is respected exactly as before. The doc root is auto-detected (<code>public/index.php</code> present means Laravel/Symfony-style; otherwise the project root).</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.11 — 2026-07-27</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.11" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
       <h2>Fixed</h2>
