@@ -131,11 +131,15 @@ pub fn push_fastcgi_route(name: &str, domain: &str, port: u16, docroot: &str) ->
                     "handle": [{ "handler": "rewrite", "uri": "{http.matchers.file.relative}" }]
                 },
                 {
+                    "match": [{ "path": ["*.php"] }],
                     "handle": [{
                         "handler": "reverse_proxy",
                         "upstreams": [{ "dial": format!("127.0.0.1:{port}") }],
                         "transport": { "protocol": "fastcgi", "root": docroot, "split_path": [".php"] }
                     }]
+                },
+                {
+                    "handle": [{ "handler": "file_server", "root": docroot }]
                 }
             ]
         }]
