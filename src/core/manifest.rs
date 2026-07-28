@@ -49,6 +49,7 @@ pub enum Language {
         plugin: Option<String>,
         binary: Option<String>,
         path: Option<String>,
+        workers: Option<u32>,
     },
 }
 
@@ -85,6 +86,13 @@ impl Language {
         match self {
             Language::Simple(_) => None,
             Language::Detailed { path, .. } => path.as_deref(),
+        }
+    }
+
+    pub fn workers(&self) -> Option<u32> {
+        match self {
+            Language::Simple(_) => None,
+            Language::Detailed { workers, .. } => *workers,
         }
     }
 }

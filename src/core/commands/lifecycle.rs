@@ -409,7 +409,8 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
             let mut extra_env = BTreeMap::new();
             extra_env.insert("PORT".to_string(), port.to_string());
             extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries));
-            extra_env.insert("PHP_FCGI_CHILDREN".to_string(), "4".to_string());
+            let workers = php_entry.workers().unwrap_or(4);
+            extra_env.insert("PHP_FCGI_CHILDREN".to_string(), workers.to_string());
             extra_env.insert("PHP_FCGI_MAX_REQUESTS".to_string(), "500".to_string());
             (resolved_command, extra_env, Some(docroot))
         }
