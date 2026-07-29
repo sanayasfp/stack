@@ -150,9 +150,9 @@ enum Command {
     },
     /// Install the shell hook and check dependencies
     Setup {
-        /// Shell to install the hook for
-        #[arg(long, default_value = "pwsh")]
-        shell: String,
+        /// Shell to install the hook for (auto-detected from the parent process if omitted)
+        #[arg(long)]
+        shell: Option<String>,
     },
 }
 
@@ -191,6 +191,7 @@ pub fn run() {
             Ok(())
         }
         Command::Setup { shell } => {
+            let shell = shell.unwrap_or_else(crate::core::shell::detect_shell);
             shell_integration::setup(&shell);
             Ok(())
         }

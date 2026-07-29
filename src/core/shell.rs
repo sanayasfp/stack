@@ -9,25 +9,51 @@ const HOOK_MARKER: &str = "# stack shell hook";
 pub fn profile_path(shell: &str) -> Result<PathBuf> {
     match shell {
         "pwsh" | "powershell" => {
-            // Try pwsh (PowerShell Core) first, fall back to powershell (Windows PowerShell).
-            // On some machines only one of the two is on PATH.
-            let output = ["pwsh", "powershell"]
-                .iter()
-                .find_map(|bin| {
-                    std::process::Command::new(bin)
-                        .args(["-NoProfile", "-Command", "$PROFILE"])
-                        .output()
-                        .ok()
-                })
-                .ok_or_else(|| anyhow!("neither pwsh nor powershell found on PATH"))?;
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if path.is_empty() {
-                bail!("PowerShell returned an empty $PROFILE path");
-            }
-            Ok(PathBuf::from(path))
+            // Compute $PROFILE directly instead of shelling out to pwsh/powershell to ask
+            // for it: neither binary needs to be installed or even resolvable on PATH just
+            // to know where its profile file lives, and the layout is a documented Windows
+            // known-folder formula, not something that varies at runtime. This also
+            // respects Documents-folder redirection (e.g. OneDrive), which a hardcoded
+            // `%USERPROFILE%\Documents` would not.
+            let docs = dirs::document_dir().ok_or_else(|| anyhow!("could not resolve the Documents folder"))?;
+            let subdir = if shell == "pwsh" { "PowerShell" } else { "WindowsPowerShell" };
+            Ok(docs.join(subdir).join("Microsoft.PowerShell_profile.ps1"))
         }
         other => bail!("no profile-path resolution for shell '{other}' yet"),
     }
+}
+
+// Best-effort detection of the shell that launched `stack setup`, by walking up
+// the ancestor chain -- same technique as shellingham (the reference
+// implementation Starship/pip/etc. use for this exact problem): there is no
+// authoritative "which shell spawned me" API, so this is the standard
+// approach, not a shortcut. Walking multiple levels (rather than just the
+// immediate parent) matters in practice: the direct parent of stack.exe is
+// often an unrecognized wrapper (conhost.exe, WindowsTerminal.exe,
+// explorer.exe for a pinned taskbar launch) sitting between stack.exe and the
+// actual shell. Defaults to "pwsh" when nothing recognizable turns up within
+// the depth limit, so `stack setup` still does something sensible.
+const SHELL_DETECT_MAX_DEPTH: usize = 10;
+
+pub fn detect_shell() -> String {
+    (|| {
+        let mut sys = sysinfo::System::new();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let mut pid = sysinfo::get_current_pid().ok()?;
+        for _ in 0..SHELL_DETECT_MAX_DEPTH {
+            let parent_pid = sys.process(pid)?.parent()?;
+            let parent_name = sys.process(parent_pid)?.name().to_string_lossy().to_lowercase();
+            let parent_name = parent_name.strip_suffix(".exe").unwrap_or(&parent_name);
+            match parent_name {
+                "pwsh" => return Some("pwsh".to_string()),
+                "powershell" => return Some("powershell".to_string()),
+                "cmd" => return Some("cmd".to_string()),
+                _ => pid = parent_pid,
+            }
+        }
+        None
+    })()
+    .unwrap_or_else(|| "pwsh".to_string())
 }
 
 pub fn stack_exe_dir() -> Result<PathBuf> {
