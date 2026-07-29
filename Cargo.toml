@@ -30,6 +30,7 @@ sysinfo = "0.39.6"
 toml = "1.1.3"
 toml_edit = "0.25.13"
 ureq = { version = "3.3.0", features = ["json"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [profile.dist]
 inherits = "release"

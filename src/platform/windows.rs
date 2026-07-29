@@ -80,22 +80,34 @@ fn install_portable_zip(url: &str, name: &str, version: &str) -> Result<()> {
     download(url, &zip_path)?;
 
     println!("  extracting {name} to {}", install_dir.display());
-    let escape_for_pwsh_single_quotes = |s: &std::path::Path| s.display().to_string().replace('\'', "''");
-    let status = std::process::Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-Command",
-            &format!(
-                "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
-                escape_for_pwsh_single_quotes(&zip_path),
-                escape_for_pwsh_single_quotes(&install_dir)
-            ),
-        ])
-        .status()
-        .context("failed to run Expand-Archive")?;
-    if !status.success() {
-        bail!("extracting {name} failed");
+
+    let file = std::fs::File::open(&zip_path).context("failed to open downloaded zip")?;
+    let mut archive = zip::ZipArchive::new(file).context("failed to read zip archive")?;
+
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i).context("failed to read zip entry")?;
+        let outpath = match entry.enclosed_name() {
+            Some(path) => install_dir.join(path),
+            None => continue, // skip path-traversal entries
+        };
+
+        if entry.name().ends_with('/') {
+            std::fs::create_dir_all(&outpath)
+                .with_context(|| format!("failed to create directory {}", outpath.display()))?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    std::fs::create_dir_all(p)
+                        .with_context(|| format!("failed to create parent dir {}", p.display()))?;
+                }
+            }
+            let mut outfile = std::fs::File::create(&outpath)
+                .with_context(|| format!("failed to create {}", outpath.display()))?;
+            std::io::copy(&mut entry, &mut outfile)
+                .with_context(|| format!("failed to extract {}", outpath.display()))?;
+        }
     }
+
     println!("  {name} {version} is at {} (not yet wired onto PATH — resolution is a separate step)", install_dir.display());
     Ok(())
 }

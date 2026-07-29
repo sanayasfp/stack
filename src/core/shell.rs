@@ -9,10 +9,17 @@ const HOOK_MARKER: &str = "# stack shell hook";
 pub fn profile_path(shell: &str) -> Result<PathBuf> {
     match shell {
         "pwsh" | "powershell" => {
-            let output = std::process::Command::new("powershell")
-                .args(["-NoProfile", "-Command", "$PROFILE"])
-                .output()
-                .context("failed to ask PowerShell for $PROFILE")?;
+            // Try pwsh (PowerShell Core) first, fall back to powershell (Windows PowerShell).
+            // On some machines only one of the two is on PATH.
+            let output = ["pwsh", "powershell"]
+                .iter()
+                .find_map(|bin| {
+                    std::process::Command::new(bin)
+                        .args(["-NoProfile", "-Command", "$PROFILE"])
+                        .output()
+                        .ok()
+                })
+                .ok_or_else(|| anyhow!("neither pwsh nor powershell found on PATH"))?;
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if path.is_empty() {
                 bail!("PowerShell returned an empty $PROFILE path");
