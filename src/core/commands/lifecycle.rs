@@ -76,7 +76,7 @@ fn route_project(state: &mut State, name: &str, domain: &str, port: u16) {
 }
 
 /// Connect-based, not bind-based: Windows allows a second bind on a port already in use.
-fn port_in_use(port: u16) -> bool {
+pub(crate) fn port_in_use(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
 }
 

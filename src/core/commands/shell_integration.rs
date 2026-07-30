@@ -1,10 +1,13 @@
 use anyhow::{Context, Result, anyhow, bail};
 use crate::core::caddy;
+use crate::core::commands::lifecycle::port_in_use;
 use crate::core::commands::shared::resolve_tool;
 use crate::core::constants::STACK_ACCENT_RGB;
-use crate::core::manifest::Manifest;
-use crate::core::toolchain;
+use crate::core::manifest::{self, Manifest};
+use crate::core::registry::Registry;
+use crate::core::{placeholder, toolchain};
 use crate::platform;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 fn check_on_path(name: &str) -> Result<String> {
@@ -59,7 +62,132 @@ fn scan_windows_services() {
     }
 }
 
-pub fn doctor(fix: bool) -> Result<()> {
+/// Validates a service declaration against live reality (port free/listening,
+/// path registered, placeholders resolvable) without starting anything.
+fn doctor_service(engine: &str, svc: &crate::core::manifest::Service) -> bool {
+    if let Err(e) = svc.validate(engine) {
+        println!("  service.{engine}: INVALID ({e:#})");
+        return false;
+    }
+
+    let registry_external_port =
+        if svc.path.is_none() && !svc.external { Registry::load().lookup("service", engine, &svc.version).filter(|e| e.external).and_then(|e| e.port) } else { None };
+    let is_external = svc.external || registry_external_port.is_some();
+
+    if is_external {
+        let port = svc.resolve_port(engine, false).ok().flatten().or(registry_external_port).or_else(|| manifest::conventional_port(engine));
+        match port {
+            Some(port) if port_in_use(port) => {
+                println!("  service.{engine}: OK (external, listening on {port})");
+                true
+            }
+            Some(port) => {
+                println!("  service.{engine}: nothing listening on {port} (marked external)");
+                false
+            }
+            None => {
+                println!("  service.{engine}: external, but no port resolvable — set [service.{engine}].port");
+                false
+            }
+        }
+    } else {
+        let has_path = svc.path.is_some() || Registry::load().lookup("service", engine, &svc.version).and_then(|e| e.path.clone()).is_some();
+        let path_ok = if has_path {
+            println!("  service.{engine}: OK (managed)");
+            true
+        } else {
+            println!("  service.{engine}: no path registered — run `stack register service {engine} {} <path>`", svc.version);
+            false
+        };
+        let port_ok = match svc.resolve_port(engine, false) {
+            Ok(_) => true,
+            Err(e) => {
+                println!("  service.{engine}: port placeholder unresolved ({e:#})");
+                false
+            }
+        };
+        path_ok && port_ok
+    }
+}
+
+/// Validates `[run]` against live reality the same way `doctor_service` does for services.
+fn doctor_run(run: &crate::core::manifest::Run, has_php: bool) -> bool {
+    if let Err(e) = run.validate(has_php) {
+        println!("  [run]: INVALID ({e:#})");
+        return false;
+    }
+
+    if run.external {
+        match run.resolve_port(false) {
+            Ok(Some(port)) if port_in_use(port) => {
+                println!("  [run]: OK (external, listening on {port})");
+                true
+            }
+            Ok(Some(port)) => {
+                println!("  [run]: nothing listening on {port} (marked external)");
+                false
+            }
+            Ok(None) => true,
+            Err(e) => {
+                println!("  [run]: port unresolved ({e:#})");
+                false
+            }
+        }
+    } else {
+        let port_ok = match run.resolve_port(false) {
+            Ok(Some(port)) if port_in_use(port) => {
+                println!("  [run]: port {port} already in use");
+                false
+            }
+            Ok(_) => true,
+            Err(e) => {
+                println!("  [run]: port unresolved ({e:#})");
+                false
+            }
+        };
+        let command_ok = match &run.command {
+            Some(command) => {
+                let mut reserved = BTreeMap::new();
+                reserved.insert("port".to_string(), "0".to_string());
+                match placeholder::resolve(command, &reserved, false) {
+                    Ok(_) => true,
+                    Err(missing) => {
+                        println!("  [run]: command has unresolved placeholder(s): {}", missing.join(", "));
+                        false
+                    }
+                }
+            }
+            None => true,
+        };
+        port_ok && command_ok
+    }
+}
+
+fn doctor_project() -> Result<()> {
+    let (path, manifest) =
+        Manifest::find_and_load(&PathBuf::from(".")).context("stack doctor --project: no stack.toml found in this directory or any parent")?;
+    println!("checking {}...", path.display());
+    let mut all_ok = true;
+
+    for (name, entry) in &manifest.language {
+        match toolchain::lookup(name, entry) {
+            Some(bin) => println!("  language.{name}: OK ({})", bin.display()),
+            None => println!("  language.{name}: not installed yet (will be installed on `stack up`)"),
+        }
+    }
+
+    for (engine, svc) in &manifest.service {
+        all_ok &= doctor_service(engine, svc);
+    }
+
+    if let Some(run) = &manifest.run {
+        all_ok &= doctor_run(run, manifest.language.contains_key("php"));
+    }
+
+    if all_ok { Ok(()) } else { Err(anyhow!("one or more project checks failed")) }
+}
+
+pub fn doctor(fix: bool, project: bool) -> Result<()> {
     let mut all_ok = true;
 
     for tool in ["vfox", "uv", "caddy"] {
@@ -124,6 +252,13 @@ pub fn doctor(fix: bool) -> Result<()> {
         }
     }
 
+    if project
+        && let Err(e) = doctor_project()
+    {
+        println!("  {e:#}");
+        all_ok = false;
+    }
+
     if all_ok { Ok(()) } else { Err(anyhow!("one or more checks failed")) }
 }
 
@@ -135,7 +270,7 @@ pub fn setup(shell: &str) {
     }
 
     println!("checking vfox/uv/caddy...");
-    if let Err(e) = doctor(true) {
+    if let Err(e) = doctor(true, false) {
         eprintln!("warning: {e:#}");
     }
 

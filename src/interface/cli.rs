@@ -155,6 +155,9 @@ enum Command {
         /// Install any missing pinned dependency (vfox, uv, Caddy)
         #[arg(long)]
         fix: bool,
+        /// Also validate the current directory's stack.toml against live reality (ports, service paths, placeholders) without starting anything
+        #[arg(long)]
+        project: bool,
     },
     /// Print the shell hook script (used internally by `setup`)
     Hook {
@@ -204,7 +207,7 @@ pub fn run() {
             Ok(())
         }
         Command::Logs { name, follow, tail } => lifecycle::logs(name, follow, tail),
-        Command::Doctor { fix } => shell_integration::doctor(fix),
+        Command::Doctor { fix, project } => shell_integration::doctor(fix, project),
         Command::Hook { shell } => shell_integration::hook(&shell),
         Command::Activate { shell } => {
             shell_integration::activate(&shell);
