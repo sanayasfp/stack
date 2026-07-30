@@ -6,7 +6,7 @@ use crate::core::process::{self, Runnable};
 use crate::core::projects::{ProjectRecord, ProjectsFile};
 use crate::core::registry::Registry;
 use crate::core::state::State;
-use crate::core::{placeholder, toolchain};
+use crate::core::{placeholder, toolchain, trust};
 use crate::platform;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -305,7 +305,7 @@ fn process_clones(project_dir: &Path, clones: &[CloneEntry]) -> Result<()> {
     Ok(())
 }
 
-pub fn up(target: &str, allow_prompt: bool, run_clones: bool) -> Result<()> {
+pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) -> Result<()> {
     let (path, manifest) = resolve_up_target(target)?;
     let project_dir = path.parent().unwrap_or(Path::new(target)).to_path_buf();
 
@@ -316,6 +316,8 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool) -> Result<()> {
     }
     println!("  languages: {}", join_names(manifest.language.keys()));
     println!("  services: {}", join_names(manifest.service.keys()));
+
+    trust::ensure_trusted(&project_dir, &manifest, auto_yes)?;
 
     if run_clones {
         process_clones(&project_dir, &manifest.clones)?;
@@ -589,7 +591,7 @@ pub fn restart(project: Option<String>, all: bool) -> Result<()> {
         down(None, true)?;
         for name in running {
             println!("restarting {name}...");
-            if let Err(e) = up(&name, false, false) {
+            if let Err(e) = up(&name, false, false, false) {
                 eprintln!("  {name}: failed to restart: {e:#}");
             }
         }
@@ -597,7 +599,7 @@ pub fn restart(project: Option<String>, all: bool) -> Result<()> {
     } else {
         let name = resolve_project_name(project).map_err(|e| anyhow!("{e:#} (or pass --all)"))?;
         down(Some(name.clone()), false)?;
-        up(&name, false, false)
+        up(&name, false, false, false)
     }
 }
 

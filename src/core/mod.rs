@@ -11,3 +11,4 @@ pub mod registry;
 pub mod shell;
 pub mod state;
 pub mod toolchain;
+pub mod trust;
