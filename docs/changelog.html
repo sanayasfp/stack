@@ -43,6 +43,17 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.1.15 — 2026-07-30</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.15" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
+      <h2>Fixed</h2>
+      <ul>
+        <li>Tool installs (Caddy, uv) could fail during <code>stack setup</code>/the first <code>stack up</code> with <code>failed to run Expand-Archive</code> on machines where PowerShell's <code>Expand-Archive</code> cmdlet wasn't usable (older PowerShell, execution-policy restrictions, etc.). Zip extraction is now handled entirely in-process via a pure-Rust implementation, with no external PowerShell process involved.</li>
+        <li><code>stack setup</code> could fail outright with <code>failed to ask PowerShell for $PROFILE: program not found</code>, silently skipping the shell hook, on machines where neither <code>pwsh</code> nor <code>powershell</code> could be spawned as a subprocess. The profile path is now computed directly — it's a documented, static Windows known-folder location — instead of asking a spawned shell process for it, and it correctly follows Documents-folder redirection (e.g. OneDrive).</li>
+        <li><code>stack setup</code> previously assumed <code>pwsh</code> by default. It now detects which shell (<code>pwsh</code>, <code>powershell</code>, or <code>cmd</code>) actually launched it, so the hook is written into the profile you actually use.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.13 — 2026-07-28</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.13" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
       <h2>Fixed</h2>
