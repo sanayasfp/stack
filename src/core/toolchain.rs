@@ -11,6 +11,7 @@ enum Lookup {
     NotInstalled,
 }
 
+/// vfox exits 0 and prints "notfound" (not a non-zero exit code) when the version isn't installed.
 fn vfox_version_dir(plugin: &str, version: &str) -> Result<PathBuf, Lookup> {
     let output = Command::new("vfox")
         .args(["info", &format!("{plugin}@{version}")])
@@ -30,9 +31,6 @@ fn vfox_version_dir(plugin: &str, version: &str) -> Result<PathBuf, Lookup> {
         )));
     }
 
-    // vfox exits 0 and prints the literal text "notfound" instead of a non-zero
-    // exit code when the version isn't installed -- exit status alone can't
-    // detect this.
     let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if path.is_empty() || path == "notfound" || !Path::new(&path).is_dir() {
         return Err(Lookup::NotInstalled);
@@ -40,13 +38,8 @@ fn vfox_version_dir(plugin: &str, version: &str) -> Result<PathBuf, Lookup> {
     Ok(PathBuf::from(path))
 }
 
-// `vfox info <plugin>@<version>` needs an exact match against vfox's own
-// installed key, but a manifest can pin a loose version (e.g. "8.4") that
-// vfox resolves and installs under a more specific concrete key (e.g.
-// "8.4.0-nts") -- `vfox install php@8.4` succeeds and prints that it
-// installed 8.4.0-nts, but a follow-up `vfox info php@8.4` still reports
-// "notfound" because "8.4" was never itself an installed key. Fall back to
-// matching against what's actually installed (`vfox list`) before giving up.
+/// Falls back to matching a loose version (e.g. "8.4") against what `vfox list` actually
+/// has installed, since `vfox info` needs an exact match against vfox's own installed key.
 fn vfox_find_installed(plugin: &str, version: &str) -> Result<PathBuf, Lookup> {
     match vfox_version_dir(plugin, version) {
         Ok(dir) => Ok(dir),
@@ -78,8 +71,7 @@ fn vfox_installed_versions(plugin: &str) -> Vec<String> {
         .collect()
 }
 
-// True if `requested` is `installed` itself, or a dotted/hyphenated prefix
-// of it (so "8.4" matches "8.4.0-nts" but not "8.40.0").
+/// True if `installed` is `requested` itself, or a dotted/hyphenated prefix of it.
 fn version_matches_prefix(installed: &str, requested: &str) -> bool {
     installed == requested || installed.strip_prefix(requested).is_some_and(|rest| rest.starts_with('.') || rest.starts_with('-'))
 }
@@ -97,6 +89,52 @@ fn compare_versions(a: &str, b: &str) -> Ordering {
         }
     }
     sa.len().cmp(&sb.len())
+}
+
+/// Curated set of extensions official PHP-for-Windows builds ship disabled that a
+/// local dev app is likely to need — not "enable everything".
+const PHP_FRESH_INSTALL_EXTENSIONS: &[&str] = &["pdo_mysql", "pdo_sqlite", "pdo_pgsql", "pgsql", "ldap", "fileinfo", "sockets", "sodium", "bz2"];
+
+/// Patches a freshly-downloaded php.ini's content in memory. `opcache_dll_present` must
+/// reflect whether ext/php_opcache.dll exists, since PHP 8.5+ builds OPcache into core
+/// and ships no DLL or `zend_extension=opcache` line to uncomment.
+fn patch_php_ini_content(content: &str, opcache_dll_present: bool) -> String {
+    let mut out = String::with_capacity(content.len());
+    for line in content.lines() {
+        let patched = PHP_FRESH_INSTALL_EXTENSIONS
+            .iter()
+            .find(|ext| line == format!(";extension={ext}"))
+            .map(|ext| format!("extension={ext}"))
+            .or_else(|| (opcache_dll_present && line == ";zend_extension=opcache").then(|| "zend_extension=opcache".to_string()))
+            .or_else(|| (line == ";opcache.enable=1").then(|| "opcache.enable=1".to_string()))
+            .or_else(|| (line == ";opcache.enable_cli=0").then(|| "opcache.enable_cli=1".to_string()))
+            .or_else(|| line.starts_with(";date.timezone").then(|| "date.timezone = UTC".to_string()))
+            .or_else(|| line.starts_with("memory_limit = ").then(|| "memory_limit = 512M".to_string()))
+            .or_else(|| line.starts_with("upload_max_filesize = ").then(|| "upload_max_filesize = 64M".to_string()))
+            .or_else(|| line.starts_with("post_max_size = ").then(|| "post_max_size = 64M".to_string()));
+        out.push_str(patched.as_deref().unwrap_or(line));
+        out.push('\n');
+    }
+    out
+}
+
+/// Runs once right after a fresh `vfox install php@X`, patching php.ini directly rather
+/// than passing command-line flags (which wouldn't cover `php artisan`, composer, etc.).
+/// Best-effort: a fresh install should stay usable even if this fails.
+fn configure_fresh_php_install(install_dir: &Path) {
+    let ini_path = install_dir.join("php.ini");
+    let content = match std::fs::read_to_string(&ini_path) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("warning: could not configure fresh PHP install ({}): {e:#}", ini_path.display());
+            return;
+        }
+    };
+    let opcache_dll_present = install_dir.join("ext").join("php_opcache.dll").is_file();
+    let patched = patch_php_ini_content(&content, opcache_dll_present);
+    if let Err(e) = std::fs::write(&ini_path, patched) {
+        eprintln!("warning: could not write configured php.ini ({}): {e:#}", ini_path.display());
+    }
 }
 
 fn vfox_install(plugin: &str, version: &str) -> Result<()> {
@@ -117,13 +155,20 @@ fn vfox_resolve(plugin: &str, version: &str, binary_name: &str) -> Result<PathBu
         Err(Lookup::NotRunnable(msg)) => return Err(anyhow!("{msg}")),
         Err(Lookup::NotInstalled) => {
             vfox_install(plugin, version)?;
-            match vfox_find_installed(plugin, version) {
+            let dir = match vfox_find_installed(plugin, version) {
                 Ok(d) => d,
                 Err(Lookup::NotRunnable(msg)) => return Err(anyhow!("{msg}")),
                 Err(Lookup::NotInstalled) => {
                     bail!("{plugin}@{version} still not found after install");
                 }
+            };
+            if plugin == "php"
+                && let Some(bin) = find_binary(&dir, binary_name)
+                && let Some(bin_dir) = bin.parent()
+            {
+                configure_fresh_php_install(bin_dir);
             }
+            dir
         }
     };
     find_binary(&dir, binary_name).ok_or_else(|| anyhow!("{binary_name} not found under {}", dir.display()))
@@ -298,5 +343,44 @@ mod tests {
     #[test]
     fn compare_versions_falls_back_to_string_compare_for_non_numeric_segments() {
         assert_eq!(compare_versions("8.4.0-nts", "8.4.0-nts"), Ordering::Equal);
+    }
+
+    #[test]
+    fn patch_php_ini_content_enables_the_curated_extension_list() {
+        let ini = ";extension=pdo_mysql\n;extension=pdo_sqlite\n;extension=pdo_pgsql\n;extension=pgsql\n;extension=ldap\n;extension=fileinfo\n;extension=sockets\n;extension=sodium\n;extension=bz2\n;extension=snmp\n";
+        let patched = patch_php_ini_content(ini, false);
+        for ext in PHP_FRESH_INSTALL_EXTENSIONS {
+            assert!(patched.contains(&format!("extension={ext}\n")) && !patched.contains(&format!(";extension={ext}\n")), "expected {ext} to be enabled");
+        }
+        assert!(patched.contains(";extension=snmp"), "extensions outside the curated list must stay untouched");
+    }
+
+    #[test]
+    fn patch_php_ini_content_enables_opcache_only_when_dll_present() {
+        let ini = ";zend_extension=opcache\n;opcache.enable=1\n;opcache.enable_cli=0\n";
+        let with_dll = patch_php_ini_content(ini, true);
+        assert!(with_dll.contains("zend_extension=opcache\n") && !with_dll.contains(";zend_extension=opcache"));
+        assert!(with_dll.contains("opcache.enable=1\n") && !with_dll.contains(";opcache.enable=1"));
+        assert!(with_dll.contains("opcache.enable_cli=1\n"), "opcache.enable_cli should flip to 1 (was disabled at 0)");
+
+        let without_dll = patch_php_ini_content(ini, false);
+        assert!(without_dll.contains(";zend_extension=opcache\n"), "must not uncomment a load directive for a DLL that doesn't exist (PHP 8.5+ builds OPcache into core)");
+        assert!(without_dll.contains("opcache.enable=1\n"), "opcache.enable/enable_cli still apply even when OPcache is built-in, not a loadable module");
+    }
+
+    #[test]
+    fn patch_php_ini_content_sets_dev_friendly_ini_values() {
+        let ini = ";date.timezone =\nmemory_limit = 128M\nupload_max_filesize = 2M\npost_max_size = 8M\n";
+        let patched = patch_php_ini_content(ini, false);
+        assert!(patched.contains("date.timezone = UTC\n"));
+        assert!(patched.contains("memory_limit = 512M\n"));
+        assert!(patched.contains("upload_max_filesize = 64M\n"));
+        assert!(patched.contains("post_max_size = 64M\n"));
+    }
+
+    #[test]
+    fn patch_php_ini_content_leaves_unrelated_lines_untouched() {
+        let ini = "[PHP]\nerror_reporting = E_ALL\ndisplay_errors = On\n; a comment\nextension=openssl\n";
+        assert_eq!(patch_php_ini_content(ini, false), ini);
     }
 }
