@@ -122,6 +122,11 @@ enum Command {
         #[arg(long)]
         all: bool,
     },
+    /// Show a project's resolved environment (binary paths, php.ini, log file, ...)
+    Describe {
+        /// Name of the project to describe; omit to use the current directory's project
+        name: Option<String>,
+    },
     /// Show the status of running projects
     #[command(alias = "ps")]
     Status,
@@ -186,6 +191,7 @@ pub fn run() {
         Command::Up { target, prompt, clone } => lifecycle::up(&target, prompt, clone),
         Command::Down { project, all } => lifecycle::down(project, all),
         Command::Restart { project, all } => lifecycle::restart(project, all),
+        Command::Describe { name } => lifecycle::describe(name),
         Command::Status => {
             lifecycle::status();
             Ok(())

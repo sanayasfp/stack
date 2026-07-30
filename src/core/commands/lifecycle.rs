@@ -601,6 +601,85 @@ pub fn restart(project: Option<String>, all: bool) -> Result<()> {
     }
 }
 
+pub fn describe(target: Option<String>) -> Result<()> {
+    let (path, manifest) = match &target {
+        Some(name) => resolve_up_target(name)?,
+        None => Manifest::find_and_load(Path::new("."))?,
+    };
+    let project_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+
+    println!("{}", manifest.project.name);
+    println!("  manifest: {}", path.display());
+    println!("  directory: {}", project_dir.display());
+    if let Some(domain) = &manifest.project.domain {
+        println!("  domain: {domain}");
+    }
+
+    let state = load_and_heal_state();
+    match state.projects.get(&manifest.project.name) {
+        Some(entry) => println!("  running: pid {} port {:?}", entry.pid, entry.port),
+        None => match state.external_runs.get(&manifest.project.name) {
+            Some(entry) => println!("  running: external, port {}", entry.port),
+            None => println!("  running: no"),
+        },
+    }
+    println!("  log: {}", process::log_path(&manifest.project.name).display());
+
+    if !manifest.language.is_empty() {
+        println!("languages:");
+        for (name, entry) in &manifest.language {
+            match toolchain::lookup(name, entry) {
+                Some(bin) => {
+                    println!("  {name}: {}", bin.display());
+                    if name == "php" {
+                        let ini = bin.with_file_name("php.ini");
+                        if ini.is_file() {
+                            println!("    php.ini: {}", ini.display());
+                        }
+                        let cgi = bin.with_file_name(format!("php-cgi{}", std::env::consts::EXE_SUFFIX));
+                        if cgi.is_file() {
+                            println!("    php-cgi: {}", cgi.display());
+                        }
+                    }
+                }
+                None => println!("  {name}: not installed"),
+            }
+        }
+    }
+
+    if !manifest.service.is_empty() {
+        println!("services:");
+        for (engine, svc) in &manifest.service {
+            if svc.external {
+                println!("  {engine}: external (BYO)");
+                continue;
+            }
+            match &svc.path {
+                Some(p) => println!("  {engine}: {p}"),
+                None => match Registry::load().lookup("service", engine, &svc.version).and_then(|e| e.path.clone()) {
+                    Some(p) => println!("  {engine}: {p}"),
+                    None => println!("  {engine}: not registered (run `stack register service {engine} {} <path>`)", svc.version),
+                },
+            }
+            if let Some(home) = dirs::home_dir() {
+                println!("    data: {}", home.join(".stack").join("data").join(engine).join(&svc.version).display());
+            }
+        }
+    }
+
+    if !manifest.tool.is_empty() {
+        println!("tools:");
+        for (name, tool) in &manifest.tool {
+            match resolve_tool(name, tool, false) {
+                Ok(bin) => println!("  {name}: {}", bin.display()),
+                Err(e) => println!("  {name}: {e:#}"),
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub fn status() {
     let state = load_and_heal_state();
     println!("projects running: {}", state.projects.len());
