@@ -1,6 +1,5 @@
 use crate::core::commands::{lifecycle, registry_commands, scaffold, shell_integration};
 use clap::{Parser, Subcommand};
-use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "stack", version, about = "Native, zero-container multi-project dev environment manager. No Docker, no VMs.")]
@@ -97,9 +96,9 @@ enum Command {
     },
     /// Resolve toolchains and start a project's services
     Up {
-        /// Project directory containing stack.toml
+        /// Directory containing stack.toml, or the name of a project stack has seen before (from anywhere)
         #[arg(default_value = ".")]
-        dir: PathBuf,
+        target: String,
         /// Prompt interactively for any placeholder value not found in the environment
         #[arg(long)]
         prompt: bool,
@@ -109,6 +108,14 @@ enum Command {
         /// Name of the project (or external run) to stop; omit to use the current directory's project
         project: Option<String>,
         /// Stop every running project and shared service, including Caddy itself
+        #[arg(long)]
+        all: bool,
+    },
+    /// Stop then start a project again, from anywhere
+    Restart {
+        /// Name of the project to restart; omit to use the current directory's project
+        project: Option<String>,
+        /// Restart every currently running project
         #[arg(long)]
         all: bool,
     },
@@ -173,8 +180,9 @@ pub fn run() {
         }
         Command::Prune { yes, purge_data } => registry_commands::prune(yes, purge_data),
         Command::LoadEnv { path } => shell_integration::load_env(path),
-        Command::Up { dir, prompt } => lifecycle::up(&dir, prompt),
+        Command::Up { target, prompt } => lifecycle::up(&target, prompt),
         Command::Down { project, all } => lifecycle::down(project, all),
+        Command::Restart { project, all } => lifecycle::restart(project, all),
         Command::Status => {
             lifecycle::status();
             Ok(())

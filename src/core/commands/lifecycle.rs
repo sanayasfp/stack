@@ -47,9 +47,26 @@ fn record_project_versions(manifest: &Manifest, project_dir: &Path) {
     let services: Vec<(String, String)> = manifest.service.iter().map(|(name, svc)| (name.clone(), svc.version.clone())).collect();
 
     let mut projects = ProjectsFile::load();
-    projects.projects.insert(project_dir.display().to_string(), ProjectRecord { languages, services });
+    projects.projects.insert(manifest.project.name.clone(), ProjectRecord { directory: project_dir.display().to_string(), languages, services });
     if let Err(e) = projects.save() {
         eprintln!("  warning: failed to persist projects.json: {e}");
+    }
+}
+
+/// `target` is a path first, a project name second: an existing `stack.toml`
+/// (found the normal way, walking up from `target`) always wins, so this
+/// can't break `stack up .`/`stack up ../other-project`. Only when that
+/// lookup fails does it check `projects.json` for a project by that name --
+/// this is what makes `stack up <name>` work from anywhere, not just from
+/// inside the project or via an explicit path.
+fn resolve_up_target(target: &str) -> Result<(PathBuf, Manifest)> {
+    match Manifest::find_and_load(Path::new(target)) {
+        Ok(found) => Ok(found),
+        Err(path_err) => match ProjectsFile::load().projects.get(target) {
+            Some(record) => Manifest::find_and_load(Path::new(&record.directory))
+                .with_context(|| format!("project '{target}' is tracked at {}, but its stack.toml is no longer there", record.directory)),
+            None => Err(path_err),
+        },
     }
 }
 
@@ -254,9 +271,9 @@ fn process_clones(project_dir: &Path, clones: &[CloneEntry]) -> Result<()> {
     Ok(())
 }
 
-pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
-    let (path, manifest) = Manifest::find_and_load(dir)?;
-    let project_dir = path.parent().unwrap_or(dir).to_path_buf();
+pub fn up(target: &str, allow_prompt: bool) -> Result<()> {
+    let (path, manifest) = resolve_up_target(target)?;
+    let project_dir = path.parent().unwrap_or(Path::new(target)).to_path_buf();
 
     println!("Loaded {}", path.display());
     println!("  project: {}", manifest.project.name);
@@ -519,6 +536,46 @@ pub fn down(project: Option<String>, all: bool) -> Result<()> {
     }
 
     state.save().context("failed to persist state")
+}
+
+/// `--all` snapshots the names of everything currently running *before*
+/// tearing it down -- `down(None, true)` clears `state.projects` as it
+/// stops each one, so there'd be nothing left to iterate afterward.
+/// Restarting each by name (not by the directory it happened to be run
+/// from) reuses the exact same `stack up <name>` resolution as a normal
+/// call, so it works the same way from anywhere.
+///
+/// Snapshot must cover `state.external_runs` too, not just `state.projects`:
+/// a project with `[run].external = true` (e.g. its own dev server started
+/// outside stack) is tracked *only* under `external_runs`, never under
+/// `projects` -- and `down --all` still stops that project's other
+/// declared services along with everything else. Missing this meant an
+/// external-run project's services got killed with nothing bringing them
+/// back (caught by testing against a real project, not assumed). A
+/// service declared by a project with neither a `[run]` block nor an
+/// external one has no footprint in either map and isn't covered here --
+/// a narrower, currently-accepted gap.
+pub fn restart(project: Option<String>, all: bool) -> Result<()> {
+    if all {
+        let state = load_and_heal_state();
+        let running: std::collections::BTreeSet<String> = state.projects.keys().chain(state.external_runs.keys()).cloned().collect();
+        if running.is_empty() {
+            println!("nothing running to restart");
+            return Ok(());
+        }
+        down(None, true)?;
+        for name in running {
+            println!("restarting {name}...");
+            if let Err(e) = up(&name, false) {
+                eprintln!("  {name}: failed to restart: {e:#}");
+            }
+        }
+        Ok(())
+    } else {
+        let name = resolve_project_name(project).map_err(|e| anyhow!("{e:#} (or pass --all)"))?;
+        down(Some(name.clone()), false)?;
+        up(&name, false)
+    }
 }
 
 pub fn status() {

@@ -125,10 +125,10 @@ pub fn prune(yes: bool, purge_data: bool) -> Result<()> {
     let mut referenced_services: std::collections::BTreeSet<(String, String)> = std::collections::BTreeSet::new();
     let mut dirty = false;
 
-    projects.projects.retain(|path, record| {
-        let dir = Path::new(path);
+    projects.projects.retain(|name, record| {
+        let dir = Path::new(&record.directory);
         if !dir.is_dir() {
-            println!("  (project no longer exists, dropping from tracking: {path})");
+            println!("  (project no longer exists, dropping from tracking: {name} at {})", record.directory);
             dirty = true;
             return false;
         }
