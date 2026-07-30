@@ -102,6 +102,9 @@ enum Command {
         /// Prompt interactively for any placeholder value not found in the environment
         #[arg(long)]
         prompt: bool,
+        /// Fetch any [[clone]] entries declared in the manifest
+        #[arg(long)]
+        clone: bool,
     },
     /// Stop a running project's services
     Down {
@@ -180,7 +183,7 @@ pub fn run() {
         }
         Command::Prune { yes, purge_data } => registry_commands::prune(yes, purge_data),
         Command::LoadEnv { path } => shell_integration::load_env(path),
-        Command::Up { target, prompt } => lifecycle::up(&target, prompt),
+        Command::Up { target, prompt, clone } => lifecycle::up(&target, prompt, clone),
         Command::Down { project, all } => lifecycle::down(project, all),
         Command::Restart { project, all } => lifecycle::restart(project, all),
         Command::Status => {

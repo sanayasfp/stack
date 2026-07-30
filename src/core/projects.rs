@@ -3,9 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-/// Keyed by project name (`manifest.project.name`), not directory -- this is
-/// what makes `stack up <name>`/`stack restart <name>` name-addressable from
-/// anywhere: the directory to load is a field on the record, not the key.
+/// Keyed by project name, not directory, so projects are addressable by name from anywhere.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ProjectsFile {
     #[serde(default)]

@@ -53,12 +53,7 @@ fn record_project_versions(manifest: &Manifest, project_dir: &Path) {
     }
 }
 
-/// `target` is a path first, a project name second: an existing `stack.toml`
-/// (found the normal way, walking up from `target`) always wins, so this
-/// can't break `stack up .`/`stack up ../other-project`. Only when that
-/// lookup fails does it check `projects.json` for a project by that name --
-/// this is what makes `stack up <name>` work from anywhere, not just from
-/// inside the project or via an explicit path.
+/// Resolves `target` as a path first, falling back to a tracked project name in `projects.json`.
 fn resolve_up_target(target: &str) -> Result<(PathBuf, Manifest)> {
     match Manifest::find_and_load(Path::new(target)) {
         Ok(found) => Ok(found),
@@ -238,9 +233,56 @@ fn handle_external_run(state: &mut State, manifest: &Manifest, port: u16) {
     save_state(state);
 }
 
+fn run_git(args: &[&str], cwd: &Path) -> Result<()> {
+    let status = std::process::Command::new("git").arg("-C").arg(cwd).args(args).status().context("failed to run git")?;
+    if !status.success() {
+        bail!("git {} failed", args.join(" "));
+    }
+    Ok(())
+}
+
+fn git_output(args: &[&str], cwd: &Path) -> Result<String> {
+    let output = std::process::Command::new("git").arg("-C").arg(cwd).args(args).output().context("failed to run git")?;
+    if !output.status.success() {
+        bail!("git {} failed: {}", args.join(" "), String::from_utf8_lossy(&output.stderr).trim());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// The remote's default branch name, resolved via `refs/remotes/origin/HEAD`.
+fn remote_default_branch(target: &Path) -> Result<String> {
+    run_git(&["remote", "set-head", "origin", "-a"], target)?;
+    let symref = git_output(&["symbolic-ref", "refs/remotes/origin/HEAD"], target)?;
+    symref.strip_prefix("refs/remotes/origin/").map(str::to_string).ok_or_else(|| anyhow!("unexpected symbolic-ref output: {symref}"))
+}
+
+/// Clones into an existing (non-empty) target dir via init + remote + fetch + checkout,
+/// since `git clone` itself requires an empty target.
+fn clone_in_place(clone: &CloneEntry, target: &Path) -> Result<()> {
+    if target.join(".git").is_dir() {
+        println!("  clone: {} already initialized in {}, leaving untouched", clone.repo, target.display());
+        return Ok(());
+    }
+    println!("  clone: {} -> {} (in place)", clone.repo, target.display());
+    run_git(&["init"], target)?;
+    run_git(&["remote", "add", "origin", &clone.repo], target)?;
+    run_git(&["fetch", "origin"], target)?;
+    let branch = match &clone.git_ref {
+        Some(git_ref) => git_ref.clone(),
+        None => remote_default_branch(target)?,
+    };
+    run_git(&["checkout", "-B", &branch, &format!("origin/{branch}")], target)
+}
+
 fn process_clones(project_dir: &Path, clones: &[CloneEntry]) -> Result<()> {
     for clone in clones {
-        let target = project_dir.join(&clone.path);
+        let target = clone.target_dir(project_dir)?;
+
+        if target == project_dir {
+            clone_in_place(clone, &target)?;
+            continue;
+        }
+
         if target.exists() {
             println!("  clone: {} already exists, leaving untouched", target.display());
             continue;
@@ -257,21 +299,13 @@ fn process_clones(project_dir: &Path, clones: &[CloneEntry]) -> Result<()> {
         }
 
         if let Some(git_ref) = &clone.git_ref {
-            let status = std::process::Command::new("git")
-                .arg("-C")
-                .arg(&target)
-                .args(["checkout", git_ref])
-                .status()
-                .context("failed to run git checkout")?;
-            if !status.success() {
-                bail!("git checkout {git_ref} failed for {}", clone.repo);
-            }
+            run_git(&["checkout", git_ref], &target)?;
         }
     }
     Ok(())
 }
 
-pub fn up(target: &str, allow_prompt: bool) -> Result<()> {
+pub fn up(target: &str, allow_prompt: bool, run_clones: bool) -> Result<()> {
     let (path, manifest) = resolve_up_target(target)?;
     let project_dir = path.parent().unwrap_or(Path::new(target)).to_path_buf();
 
@@ -283,7 +317,11 @@ pub fn up(target: &str, allow_prompt: bool) -> Result<()> {
     println!("  languages: {}", join_names(manifest.language.keys()));
     println!("  services: {}", join_names(manifest.service.keys()));
 
-    process_clones(&project_dir, &manifest.clones)?;
+    if run_clones {
+        process_clones(&project_dir, &manifest.clones)?;
+    } else if !manifest.clones.is_empty() {
+        println!("  clone: {} declared, not fetched (pass --clone to fetch)", manifest.clones.len());
+    }
 
     let mut resolved_binaries: Vec<PathBuf> = Vec::new();
 
@@ -538,23 +576,8 @@ pub fn down(project: Option<String>, all: bool) -> Result<()> {
     state.save().context("failed to persist state")
 }
 
-/// `--all` snapshots the names of everything currently running *before*
-/// tearing it down -- `down(None, true)` clears `state.projects` as it
-/// stops each one, so there'd be nothing left to iterate afterward.
-/// Restarting each by name (not by the directory it happened to be run
-/// from) reuses the exact same `stack up <name>` resolution as a normal
-/// call, so it works the same way from anywhere.
-///
-/// Snapshot must cover `state.external_runs` too, not just `state.projects`:
-/// a project with `[run].external = true` (e.g. its own dev server started
-/// outside stack) is tracked *only* under `external_runs`, never under
-/// `projects` -- and `down --all` still stops that project's other
-/// declared services along with everything else. Missing this meant an
-/// external-run project's services got killed with nothing bringing them
-/// back (caught by testing against a real project, not assumed). A
-/// service declared by a project with neither a `[run]` block nor an
-/// external one has no footprint in either map and isn't covered here --
-/// a narrower, currently-accepted gap.
+/// `--all` snapshots the running project/external-run names before `down` clears them,
+/// then brings each back up by name.
 pub fn restart(project: Option<String>, all: bool) -> Result<()> {
     if all {
         let state = load_and_heal_state();
@@ -566,7 +589,7 @@ pub fn restart(project: Option<String>, all: bool) -> Result<()> {
         down(None, true)?;
         for name in running {
             println!("restarting {name}...");
-            if let Err(e) = up(&name, false) {
+            if let Err(e) = up(&name, false, false) {
                 eprintln!("  {name}: failed to restart: {e:#}");
             }
         }
@@ -574,7 +597,7 @@ pub fn restart(project: Option<String>, all: bool) -> Result<()> {
     } else {
         let name = resolve_project_name(project).map_err(|e| anyhow!("{e:#} (or pass --all)"))?;
         down(Some(name.clone()), false)?;
-        up(&name, false)
+        up(&name, false, false)
     }
 }
 

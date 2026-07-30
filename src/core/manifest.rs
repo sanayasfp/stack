@@ -29,14 +29,31 @@ pub struct Project {
 #[derive(Debug, Deserialize)]
 pub struct CloneEntry {
     pub repo: String,
-    #[serde(default = "default_clone_path")]
-    pub path: String,
+    pub path: Option<String>,
     #[serde(rename = "ref")]
     pub git_ref: Option<String>,
 }
 
-fn default_clone_path() -> String {
-    ".".to_string()
+impl CloneEntry {
+    /// The last path segment of `repo`, with a trailing `.git` stripped.
+    pub fn derived_folder_name(&self) -> Result<String> {
+        let name = self
+            .repo
+            .trim_end_matches('/')
+            .rsplit(['/', ':'])
+            .next()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| anyhow!("could not derive a folder name from repo URL '{}'", self.repo))?;
+        Ok(name.strip_suffix(".git").unwrap_or(name).to_string())
+    }
+
+    /// The directory this entry clones into, under `project_dir`.
+    pub fn target_dir(&self, project_dir: &Path) -> Result<PathBuf> {
+        match &self.path {
+            Some(path) => Ok(project_dir.join(path)),
+            None => Ok(project_dir.join(self.derived_folder_name()?)),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -294,9 +311,33 @@ mod tests {
     }
 
     #[test]
-    fn clone_path_defaults_to_dot() {
+    fn clone_path_defaults_to_none() {
         let entry: CloneEntry = toml::from_str("repo = \"git@github.com:acme/x.git\"\n").unwrap();
-        assert_eq!(entry.path, ".");
+        assert_eq!(entry.path, None);
+    }
+
+    #[test]
+    fn derived_folder_name_strips_git_suffix_from_ssh_and_https_urls() {
+        let ssh: CloneEntry = toml::from_str("repo = \"git@github.com:acme/my-repo.git\"\n").unwrap();
+        assert_eq!(ssh.derived_folder_name().unwrap(), "my-repo");
+
+        let https: CloneEntry = toml::from_str("repo = \"https://github.com/acme/my-repo.git\"\n").unwrap();
+        assert_eq!(https.derived_folder_name().unwrap(), "my-repo");
+
+        let no_suffix: CloneEntry = toml::from_str("repo = \"https://github.com/acme/my-repo\"\n").unwrap();
+        assert_eq!(no_suffix.derived_folder_name().unwrap(), "my-repo");
+    }
+
+    #[test]
+    fn target_dir_uses_explicit_path_when_set() {
+        let entry: CloneEntry = toml::from_str("repo = \"git@github.com:acme/my-repo.git\"\npath = \"vendor/thing\"\n").unwrap();
+        assert_eq!(entry.target_dir(Path::new("/proj")).unwrap(), Path::new("/proj/vendor/thing"));
+    }
+
+    #[test]
+    fn target_dir_falls_back_to_derived_name_when_path_unset() {
+        let entry: CloneEntry = toml::from_str("repo = \"git@github.com:acme/my-repo.git\"\n").unwrap();
+        assert_eq!(entry.target_dir(Path::new("/proj")).unwrap(), Path::new("/proj/my-repo"));
     }
 
     #[test]
