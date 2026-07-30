@@ -305,6 +305,38 @@ fn process_clones(project_dir: &Path, clones: &[CloneEntry]) -> Result<()> {
     Ok(())
 }
 
+/// Loads a project's .env into the process environment, if present, so
+/// placeholder resolution and stack doctor --project see the same values a
+/// manual `stack load-env` would have provided.
+pub(crate) fn auto_load_dotenv(project_dir: &Path) {
+    let env_path = project_dir.join(".env");
+    if !env_path.is_file() {
+        return;
+    }
+    let iter = match dotenvy::from_path_iter(&env_path) {
+        Ok(iter) => iter,
+        Err(e) => {
+            eprintln!("  .env: warning: failed to open: {e}");
+            return;
+        }
+    };
+    let mut loaded = Vec::new();
+    for item in iter {
+        match item {
+            Ok((key, value)) => {
+                unsafe {
+                    std::env::set_var(&key, &value);
+                }
+                loaded.push(key);
+            }
+            Err(e) => eprintln!("  .env: warning: failed to parse: {e}"),
+        }
+    }
+    if !loaded.is_empty() {
+        println!("  .env: loaded {}", loaded.join(", "));
+    }
+}
+
 pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) -> Result<()> {
     let (path, manifest) = resolve_up_target(target)?;
     let project_dir = path.parent().unwrap_or(Path::new(target)).to_path_buf();
@@ -317,6 +349,7 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
     println!("  languages: {}", join_names(manifest.language.keys()));
     println!("  services: {}", join_names(manifest.service.keys()));
 
+    auto_load_dotenv(&project_dir);
     trust::ensure_trusted(&project_dir, &manifest, auto_yes)?;
 
     if run_clones {

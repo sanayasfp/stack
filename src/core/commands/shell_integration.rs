@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
 use crate::core::caddy;
-use crate::core::commands::lifecycle::port_in_use;
+use crate::core::commands::lifecycle::{auto_load_dotenv, port_in_use};
 use crate::core::commands::shared::resolve_tool;
 use crate::core::constants::STACK_ACCENT_RGB;
 use crate::core::manifest::{self, Manifest};
@@ -167,6 +167,8 @@ fn doctor_project() -> Result<()> {
     let (path, manifest) =
         Manifest::find_and_load(&PathBuf::from(".")).context("stack doctor --project: no stack.toml found in this directory or any parent")?;
     println!("checking {}...", path.display());
+    let project_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+    auto_load_dotenv(&project_dir);
     let mut all_ok = true;
 
     for (name, entry) in &manifest.language {

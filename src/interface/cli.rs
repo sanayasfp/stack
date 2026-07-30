@@ -15,6 +15,8 @@ enum Command {
         /// Directory to create the project in ("." to scaffold in the current directory)
         target: String,
     },
+    /// Scaffold a stack.toml for an existing project, pre-filled from composer.json/package.json/pyproject.toml
+    Init,
     /// Add a language, service, or tool to the project's manifest
     Add {
         /// "language", "service", or "tool"
@@ -182,6 +184,7 @@ pub fn run() {
 
     let result: anyhow::Result<()> = match cli.command {
         Command::New { target } => scaffold::new_project(&target),
+        Command::Init => scaffold::init(),
         Command::Add { kind, name, version, schema, port, command, path, manager, plugin, binary } => {
             scaffold::add(&kind, &name, version, schema, port, command, path, manager, plugin, binary)
         }
