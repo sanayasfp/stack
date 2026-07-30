@@ -63,8 +63,7 @@ fn route_project(state: &mut State, name: &str, domain: &str, port: u16) {
     }
 }
 
-// Connect-based, not bind-based: Windows allows a second bind on a port
-// already in use, which would make a bind-based check produce false negatives.
+/// Connect-based, not bind-based: Windows allows a second bind on a port already in use.
 fn port_in_use(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
 }
@@ -135,12 +134,8 @@ fn handle_external_service(engine: &str, svc: &Service, port: u16) -> Result<()>
     Ok(())
 }
 
-// `command` strings are tokenized with shell_words::split before spawning
-// (see process::spawn), which follows POSIX escaping rules: backslash is an
-// escape character there, not a path separator. A raw Windows path like
-// `C:\Scripts\meilisearch\meilisearch.exe` gets silently mangled into
-// `C:Scriptsmeilisearchmeilisearch.exe` by that split. Windows accepts `/`
-// interchangeably, so normalizing survives the split intact.
+/// Converts backslashes to forward slashes so shell_words::split (POSIX escaping rules)
+/// doesn't mangle a raw Windows path when the command is tokenized before spawning.
 fn shell_safe_path(path: &str) -> String {
     path.replace('\\', "/")
 }
@@ -373,11 +368,7 @@ pub fn up(dir: &Path, allow_prompt: bool) -> Result<()> {
         None => allocate_ephemeral_port().context("failed to allocate a port")?,
     };
 
-    // No [run].command written and [language.php] declared: default to
-    // stack's own FastCGI execution (php-cgi.exe, real concurrent worker
-    // processes) instead of requiring the user to spell out a command --
-    // the same "sensible default when omitted" pattern [service.*] already
-    // has for mysql/postgres/mongo, just for [run] specifically.
+    // No [run].command + [language.php] declared -> default to stack's own PHP FastCGI execution.
     let (resolved_command, extra_env, php_docroot) = match &run.command {
         Some(command) => {
             let mut reserved = BTreeMap::new();
@@ -442,9 +433,7 @@ fn php_cgi_binary(php_binary: &Path) -> PathBuf {
     php_binary.with_file_name(format!("php-cgi{}", std::env::consts::EXE_SUFFIX))
 }
 
-// Laravel/Symfony keep index.php in `public/`; plain PHP, WordPress, and
-// phpMyAdmin keep it at the project root. Checking which one actually has
-// the file means the manifest never has to say which kind of project it is.
+/// Detects whether index.php lives in `public/` (Laravel/Symfony) or the project root.
 fn detect_php_docroot(run_cwd: &Path) -> String {
     let public_dir = run_cwd.join("public");
     if public_dir.join("index.php").is_file() { public_dir.display().to_string() } else { run_cwd.display().to_string() }
@@ -464,11 +453,9 @@ fn find_dependent_project<'a>(projects: &'a BTreeMap<String, crate::core::state:
     projects.iter().find(|(_, other)| other.services.iter().any(|s| s == service_key)).map(|(name, _)| name.as_str())
 }
 
+/// Uses the self-healed state so a dead project's stale `services` list can't
+/// keep an orphaned service alive by looking like a live dependent.
 pub fn down(project: Option<String>, all: bool) -> Result<()> {
-    // Self-healed, not a raw load: a dead project's stale `services` list
-    // must be gone before the reference check below runs, or an already-dead
-    // project can look like a live dependent and keep an orphaned service
-    // running forever.
     let mut state = load_and_heal_state();
 
     if all {
@@ -509,10 +496,6 @@ pub fn down(project: Option<String>, all: bool) -> Result<()> {
                 Ok(()) => println!("stopped {name} (pid {})", entry.pid),
                 Err(e) => eprintln!("{name}: {e:#}"),
             }
-            // `entry` is already removed from state.projects above, so this
-            // scan over what's left is naturally "every *other* running
-            // project" -- a live query, not a stored count, so there's
-            // nothing to keep in sync as projects come and go.
             for service_key in &entry.services {
                 if let Some(other_name) = find_dependent_project(&state.projects, service_key) {
                     println!("  {service_key} also in use by '{other_name}' — leaving it running");

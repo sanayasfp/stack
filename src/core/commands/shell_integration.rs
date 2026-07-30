@@ -188,10 +188,7 @@ pub fn activate(shell: &str) {
     match shell {
         "pwsh" | "powershell" => println!("$env:PATH = \"{joined};\" + $env:PATH"),
         "cmd" => {
-            // current_path is baked in as a literal value here, not printed as
-            // %PATH% for cmd to expand later: %PATH% inside a FOR /F loop
-            // variable's runtime value does not get expanded the way it would
-            // in a normally-parsed command line.
+            // Baked in as a literal, not %PATH%: it wouldn't expand correctly inside a FOR /F loop variable.
             let current_path = std::env::var("PATH").unwrap_or_default();
             println!("SET PATH={joined};{current_path}");
         }
@@ -216,9 +213,8 @@ fn print_active_indicator(shell: &str) {
 fn apply_composer_shadow(shell: &str, php: &Path, phar: &Path) {
     match shell {
         "pwsh" | "powershell" => {
-            // global: is required: this is Invoke-Expression'd from inside the
-            // wrapper's `prompt` function, and a plain `function composer {...}`
-            // there is scoped local to `prompt` and vanishes when it returns.
+            // global: required — this runs inside the wrapper's `prompt` function, where a
+            // plain `function composer {...}` would be scoped local and vanish when it returns.
             let escape_pwsh_single_quoted = |p: &Path| p.display().to_string().replace('\'', "''");
             println!("function global:composer {{ & '{}' '{}' @args }}", escape_pwsh_single_quoted(php), escape_pwsh_single_quoted(phar));
         }
@@ -249,8 +245,8 @@ fn clear_cmd_composer_shadow() {
     }
 }
 
-// Order matters: backtick must be escaped before `$`, or the fresh backtick
-// that escaping `$` introduces would itself get escaped a second time.
+/// Order matters: backtick must be escaped before `$`, or the fresh backtick that
+/// escaping `$` introduces would itself get escaped a second time.
 fn escape_pwsh_double_quoted(value: &str) -> String {
     value.replace('`', "``").replace('$', "`$").replace('"', "`\"")
 }

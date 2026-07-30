@@ -20,12 +20,8 @@ pub struct ProcessEntry {
     pub port: Option<u16>,
     pub started_at: String,
     pub data_dir: Option<String>,
-    // "engine@version" keys this project's manifest declares (non-external
-    // services only). Only ever meaningful on a `projects` entry -- always
-    // empty on a `services` entry. Used at `stack down` time to check
-    // whether any *other* still-running project also depends on a service
-    // before stopping it -- a live query over `State::projects`, not a
-    // counter, so there's nothing to keep in sync.
+    /// "engine@version" keys this project's manifest declares. Only meaningful on a
+    /// `projects` entry; used at `stack down` time to check for other dependents.
     #[serde(default)]
     pub services: Vec<String>,
 }

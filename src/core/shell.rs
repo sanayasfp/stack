@@ -6,15 +6,11 @@ use std::path::{Path, PathBuf};
 
 const HOOK_MARKER: &str = "# stack shell hook";
 
+/// Computes $PROFILE directly (documented Windows known-folder layout) instead of
+/// shelling out to pwsh/powershell, and respects Documents-folder redirection (e.g. OneDrive).
 pub fn profile_path(shell: &str) -> Result<PathBuf> {
     match shell {
         "pwsh" | "powershell" => {
-            // Compute $PROFILE directly instead of shelling out to pwsh/powershell to ask
-            // for it: neither binary needs to be installed or even resolvable on PATH just
-            // to know where its profile file lives, and the layout is a documented Windows
-            // known-folder formula, not something that varies at runtime. This also
-            // respects Documents-folder redirection (e.g. OneDrive), which a hardcoded
-            // `%USERPROFILE%\Documents` would not.
             let docs = dirs::document_dir().ok_or_else(|| anyhow!("could not resolve the Documents folder"))?;
             let subdir = if shell == "pwsh" { "PowerShell" } else { "WindowsPowerShell" };
             Ok(docs.join(subdir).join("Microsoft.PowerShell_profile.ps1"))
@@ -23,18 +19,12 @@ pub fn profile_path(shell: &str) -> Result<PathBuf> {
     }
 }
 
-// Best-effort detection of the shell that launched `stack setup`, by walking up
-// the ancestor chain -- same technique as shellingham (the reference
-// implementation Starship/pip/etc. use for this exact problem): there is no
-// authoritative "which shell spawned me" API, so this is the standard
-// approach, not a shortcut. Walking multiple levels (rather than just the
-// immediate parent) matters in practice: the direct parent of stack.exe is
-// often an unrecognized wrapper (conhost.exe, WindowsTerminal.exe,
-// explorer.exe for a pinned taskbar launch) sitting between stack.exe and the
-// actual shell. Defaults to "pwsh" when nothing recognizable turns up within
-// the depth limit, so `stack setup` still does something sensible.
 const SHELL_DETECT_MAX_DEPTH: usize = 10;
 
+/// Walks up the ancestor process chain looking for a recognized shell (the same
+/// technique shellingham uses), since there's no authoritative "who spawned me" API.
+/// Multiple levels matter: the direct parent is often an unrecognized wrapper
+/// (conhost.exe, WindowsTerminal.exe). Falls back to "pwsh" if nothing is found.
 pub fn detect_shell() -> String {
     (|| {
         let mut sys = sysinfo::System::new();
@@ -61,10 +51,8 @@ pub fn stack_exe_dir() -> Result<PathBuf> {
     exe.parent().map(Path::to_path_buf).ok_or_else(|| anyhow!("stack.exe's path has no parent directory"))
 }
 
-// The printed pwsh script wraps the existing `prompt` function rather than
-// replacing it -- captures it into __StackOriginalPrompt and calls that at the
-// end of the new one, so an existing custom prompt (Starship, Oh My Posh,
-// etc.) keeps working instead of being silently overwritten.
+/// Wraps the existing `prompt` function rather than replacing it, so an existing
+/// custom prompt (Starship, Oh My Posh, etc.) keeps working.
 pub fn hook_script(shell: &str) -> Result<String> {
     match shell {
         "pwsh" | "powershell" => Ok(format!(

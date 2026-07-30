@@ -83,9 +83,7 @@ pub fn ensure_running(state: &mut State) -> Result<()> {
     Ok(())
 }
 
-// Delete-then-post, not a direct POST/PUT: Caddy's admin API returns 400 on a
-// POST with a duplicate @id, and PUT /id/<id> isn't a clean upsert either
-// (400 against an existing id, 404 against a new one).
+/// Deletes any existing route before posting, since Caddy's admin API has no clean upsert.
 pub fn push_route(name: &str, domain: &str, port: u16) -> Result<()> {
     let id = route_id(name);
     let _ = ureq::delete(format!("{ADMIN_API}/id/{id}")).call();
@@ -104,14 +102,8 @@ pub fn push_route(name: &str, domain: &str, port: u16) -> Result<()> {
     Ok(())
 }
 
-// Translated from Caddy's own documented expansion of the `php_fastcgi`
-// Caddyfile directive (checked against the actual fastcgi transport module,
-// which is confirmed compiled into stack's pinned Caddy binary): try the
-// literal requested path first, then that same directory's own index.php
-// (so a real subdirectory index.php wins over the root one), and only
-// fall back to the root index.php last -- the same order nginx's `index`
-// directive or Apache's `DirectoryIndex` would resolve a directory request
-// in, not a blanket "everything goes to one file" rewrite.
+/// Mirrors Caddy's `php_fastcgi` directive: try the requested path, then that
+/// directory's own index.php, then the docroot's index.php as a last resort.
 pub fn push_fastcgi_route(name: &str, domain: &str, port: u16, docroot: &str) -> Result<()> {
     let id = route_id(name);
     let _ = ureq::delete(format!("{ADMIN_API}/id/{id}")).call();
@@ -150,9 +142,8 @@ pub fn push_fastcgi_route(name: &str, domain: &str, port: u16, docroot: &str) ->
     Ok(())
 }
 
+/// Treats a 404 (route never existed) as success rather than an error.
 pub fn remove_route(name: &str) -> Result<()> {
-    // 404 (route never existed, e.g. stack down on a project that was never
-    // routed) is an expected outcome here, not a failure.
     match ureq::delete(format!("{ADMIN_API}/id/{}", route_id(name))).call() {
         Ok(_) | Err(ureq::Error::StatusCode(404)) => Ok(()),
         Err(e) => Err(anyhow!("failed to remove route: {e}")),

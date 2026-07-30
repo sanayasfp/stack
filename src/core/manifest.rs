@@ -189,10 +189,8 @@ impl Run {
         self.port.as_ref().map(|p| p.resolve(allow_prompt)).transpose()
     }
 
-    // `has_php`: whether the manifest declares [language.php] -- if so, an
-    // omitted `command` isn't an error, it means "use stack's default PHP
-    // FastCGI execution" instead of requiring the user to spell out a
-    // command by hand.
+    /// `has_php`: if [language.php] is declared, an omitted `command` means
+    /// "use stack's default PHP FastCGI execution" rather than an error.
     pub fn validate(&self, has_php: bool) -> Result<()> {
         if self.external {
             if self.command.is_some() {
@@ -358,8 +356,6 @@ mod tests {
     fn run_requires_command_unless_external_or_php() {
         let run: Run = toml::from_str("port = 8000\n").unwrap();
         assert!(run.validate(false).is_err());
-        // Same manifest, but [language.php] is declared -- an omitted
-        // command now means "use the default", not an error.
         assert!(run.validate(true).is_ok());
 
         let run: Run = toml::from_str("command = \"php -S 127.0.0.1:{port}\"\n").unwrap();

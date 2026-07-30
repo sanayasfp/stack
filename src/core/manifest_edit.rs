@@ -14,9 +14,8 @@ pub struct AddArgs {
     pub binary: Option<String>,
 }
 
-// Must construct the table via table() and insert it, not index a missing key
-// directly (parent[key] = ...): toml_edit auto-vivifies a missing key as an
-// inline table (`key = { ... }` on one line), not a real `[key]` header table.
+/// Inserts via table() rather than indexing a missing key directly, since toml_edit
+/// would auto-vivify that as an inline table instead of a real `[key]` header table.
 fn ensure_subtable<'a>(parent: &'a mut Table, key: &str) -> Result<&'a mut Table> {
     if !parent.contains_key(key) {
         let mut new_table = table();
