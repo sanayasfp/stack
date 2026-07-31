@@ -619,7 +619,7 @@ pub fn down(project: Option<String>, all: bool) -> Result<()> {
 
 /// `--all` snapshots the running project/external-run names before `down` clears them,
 /// then brings each back up by name.
-pub fn restart(project: Option<String>, all: bool) -> Result<()> {
+pub fn restart(project: Option<String>, all: bool, auto_yes: bool) -> Result<()> {
     if all {
         let state = load_and_heal_state();
         let running: std::collections::BTreeSet<String> = state.projects.keys().chain(state.external_runs.keys()).cloned().collect();
@@ -630,7 +630,7 @@ pub fn restart(project: Option<String>, all: bool) -> Result<()> {
         down(None, true)?;
         for name in running {
             println!("restarting {name}...");
-            if let Err(e) = up(&name, false, false, false) {
+            if let Err(e) = up(&name, false, false, auto_yes) {
                 eprintln!("  {name}: failed to restart: {e:#}");
             }
         }
@@ -638,7 +638,7 @@ pub fn restart(project: Option<String>, all: bool) -> Result<()> {
     } else {
         let name = resolve_project_name(project).map_err(|e| anyhow!("{e:#} (or pass --all)"))?;
         down(Some(name.clone()), false)?;
-        up(&name, false, false, false)
+        up(&name, false, false, auto_yes)
     }
 }
 

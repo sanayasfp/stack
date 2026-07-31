@@ -128,6 +128,9 @@ enum Command {
         /// Restart every currently running project
         #[arg(long)]
         all: bool,
+        /// Approve any [run]/[service.*] commands without an interactive prompt
+        #[arg(long)]
+        yes: bool,
     },
     /// Show a project's resolved environment (binary paths, php.ini, log file, ...)
     Describe {
@@ -202,7 +205,7 @@ pub fn run() {
         Command::LoadEnv { path } => shell_integration::load_env(path),
         Command::Up { target, prompt, clone, yes } => lifecycle::up(&target, prompt, clone, yes),
         Command::Down { project, all } => lifecycle::down(project, all),
-        Command::Restart { project, all } => lifecycle::restart(project, all),
+        Command::Restart { project, all, yes } => lifecycle::restart(project, all, yes),
         Command::Describe { name } => lifecycle::describe(name),
         Command::Status => {
             lifecycle::status();

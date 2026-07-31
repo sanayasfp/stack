@@ -74,12 +74,32 @@ pub fn ensure_running(state: &mut State) -> Result<()> {
         bail!("caddy started but its admin API never became reachable");
     }
 
+    // Single server listening on both :80 and :443 -- routes are unchanged
+    // by this (they match on `host`, not on listener), so plain http://
+    // keeps working exactly as before while https:// becomes available
+    // too, no redirect forced either way. The TLS automation policy has no
+    // `subjects` filter, so it applies the internal CA issuer to whatever
+    // hostname is requested over TLS, not just a fixed list.
     let base = serde_json::json!({
-        "apps": { "http": { "servers": { "srv0": { "listen": [":80"], "routes": [] } } } }
+        "apps": {
+            "http": { "servers": { "srv0": { "listen": [":80", ":443"], "routes": [] } } },
+            "tls": { "automation": { "policies": [{ "issuers": [{ "module": "internal" }] }] } }
+        }
     });
     ureq::post(format!("{ADMIN_API}/load")).send_json(base).context("failed to bootstrap caddy config")?;
 
     state.caddy_pid = Some(pid);
+    Ok(())
+}
+
+/// Installs Caddy's local CA into the OS trust store (`caddy trust`), so
+/// `https://project.localhost` shows no browser warning. Safe to re-run.
+pub fn trust() -> Result<()> {
+    let bin = resolve_caddy_binary()?;
+    let status = std::process::Command::new(bin).arg("trust").status().context("failed to run caddy trust")?;
+    if !status.success() {
+        bail!("caddy trust failed");
+    }
     Ok(())
 }
 

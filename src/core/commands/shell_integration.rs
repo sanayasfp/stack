@@ -223,6 +223,13 @@ pub fn doctor(fix: bool, project: bool) -> Result<()> {
         }
     }
 
+    if fix {
+        match caddy::trust() {
+            Ok(()) => println!("  caddy: {}", style::ok("local CA trusted (https://*.localhost works with no browser warning)")),
+            Err(e) => println!("  caddy: {}", style::warn(&format!("could not trust local CA: {e:#}"))),
+        }
+    }
+
     #[cfg(windows)]
     scan_windows_services();
 
