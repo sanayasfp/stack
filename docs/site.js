@@ -15,6 +15,16 @@
 })();
 
 (() => {
+  const toggle = document.querySelector('[data-docs-nav-toggle]');
+  const side = document.querySelector('.docs-side');
+  if (!toggle || !side) return;
+  toggle.addEventListener('click', () => {
+    const isOpen = side.classList.toggle('is-open');
+    toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  });
+})();
+
+(() => {
   document.querySelectorAll('.term').forEach((term) => {
     const body = term.querySelector('.term-body');
     const bar = term.querySelector('.term-bar');

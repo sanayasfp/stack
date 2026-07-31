@@ -367,7 +367,17 @@ textarea.input { min-height: 90px; resize: vertical; }
 .docs-main h3 { margin-top: var(--space-6); }
 .docs-main .table { margin: var(--space-4) 0; }
 .docs-main .term { margin: var(--space-4) 0; }
-@media (max-width: 820px) { .docs-layout { grid-template-columns: 1fr; } .docs-side { position: static; } }
+.docs-nav-toggle { display: none; }
+@media (max-width: 820px) {
+  .docs-layout { grid-template-columns: 1fr; }
+  .docs-nav-toggle { display: inline-flex; }
+  .docs-side {
+    position: static; display: none; grid-template-columns: none;
+    border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+    padding: var(--space-4); margin-bottom: var(--space-4);
+  }
+  .docs-side.is-open { display: flex; }
+}
 
 .table-wrap { overflow-x: auto; margin: var(--space-4) 0; }
 .table-wrap .table { margin: 0; min-width: 480px; }
