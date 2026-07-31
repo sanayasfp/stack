@@ -150,8 +150,27 @@ pub fn new_project(target: &str) -> Result<()> {
     Manifest::load(&manifest_path).with_context(|| format!("stack.toml was written but no longer parses correctly: {}", manifest_path.display()))?;
 
     println!("created {}", manifest_path.display());
+    suggest_tld_setup(&domain);
     println!("next: cd into it, add a [run] command when you know it, then `stack up`");
     Ok(())
+}
+
+/// True when `domain` needs its own DNS setup -- only `.localhost` resolves for free (RFC 6761).
+fn needs_tld_setup(domain: &str) -> bool {
+    domain != "localhost" && !domain.ends_with(".localhost")
+}
+
+/// Only `.localhost` resolves with no setup. Any other TLD (e.g. `.test`)
+/// needs a one-time local DNS step -- print where to find it.
+fn suggest_tld_setup(domain: &str) {
+    if !needs_tld_setup(domain) {
+        return;
+    }
+    #[cfg(windows)]
+    let tool = "Acrylic DNS Proxy";
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let tool = "dnsmasq";
+    println!("tip: '{domain}' needs one-time local DNS setup ({tool}) to resolve — see {}/custom-domains.html", crate::core::constants::STACK_WEBSITE);
 }
 
 struct DetectedLanguage {
@@ -221,6 +240,7 @@ pub fn init() -> Result<()> {
     Manifest::load(&manifest_path).with_context(|| format!("stack.toml was written but no longer parses correctly: {}", manifest_path.display()))?;
 
     println!("created {}", manifest_path.display());
+    suggest_tld_setup(&domain);
     println!("next: add a [run] command when you know it, then `stack up`");
     Ok(())
 }
@@ -306,5 +326,19 @@ mod tests {
         let dir = write_temp("nocomposer", "readme.txt", "nothing here");
         assert!(detect_php(&dir).is_none());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn needs_tld_setup_is_false_for_localhost_suffix() {
+        assert!(!needs_tld_setup("localhost"));
+        assert!(!needs_tld_setup("myapp.localhost"));
+        assert!(!needs_tld_setup("agora-2.localhost"));
+    }
+
+    #[test]
+    fn needs_tld_setup_is_true_when_tld_actually_changes() {
+        assert!(needs_tld_setup("myapp.test"));
+        assert!(needs_tld_setup("agora.test"));
+        assert!(needs_tld_setup("myapp.local"));
     }
 }

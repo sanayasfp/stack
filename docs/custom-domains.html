@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Custom Domains — stack docs</title>
+<meta name="description" content="Use a TLD other than .localhost (e.g. .test) with stack, by resolving it locally with Acrylic DNS Proxy (Windows) or dnsmasq (macOS/Linux)." />
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 clamp(20px, 5vw, 72px); }
+.nav { padding-inline: max(clamp(20px, 5vw, 72px), calc((100% - 1200px) / 2 + clamp(20px, 5vw, 72px))); }
+.nav a[aria-current='page'] { color: var(--color-accent-700); }
+.docs-main p, .docs-main li { font-size: 15px; }
+.docs-main .lead { font-size: 17px; opacity: 0.85; max-width: 60ch; }
+.step { display: flex; gap: var(--space-4); align-items: flex-start; margin: var(--space-6) 0; }
+.step-num { flex: none; width: 28px; height: 28px; display: grid; place-items: center;
+  border: 1px solid var(--color-divider); font-family: var(--font-heading); font-size: 12px; font-weight: 600;
+  color: var(--color-accent-700); }
+.step-body { min-width: 0; flex: 1; }
+.step-body h3 { margin-top: 0; }
+</style>
+</head>
+<body>
+<nav class="nav site-nav">
+  <a href="index.html" class="nav-lockup"><img class="nav-mark" src="assets/logo.svg" alt="" /><span class="nav-brand">stack</span></a>
+  <div class="nav-links">
+    <a href="getting-started.html">Docs</a>
+    <a href="changelog.html">Changelog</a>
+    <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <button type="button" class="btn btn-secondary btn-icon theme-toggle blueprint" id="theme-toggle" aria-label="Switch between light and dark">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</nav>
+<div class="wrap docs-layout">
+  <aside class="docs-side">
+    <div class="side-group">
+      <h6>Guide</h6>
+      <a href="getting-started.html">Getting Started</a>
+      <a href="custom-domains.html" aria-current="page">Custom Domains</a>
+    </div>
+    <div class="side-group">
+      <h6>Reference</h6>
+      <a href="manifest.html">Manifest (stack.toml)</a>
+      <a href="cli.html">CLI Commands</a>
+    </div>
+    <div class="side-group">
+      <h6>More</h6>
+      <a href="https://github.com/sanayasfp/stack/tree/main/examples" target="_blank" rel="noopener">Examples</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </aside>
+
+  <main class="docs-main">
+    <span class="kicker" style="display:block;font-family:var(--font-heading);font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--color-accent-700);margin-bottom:8px;">Guide</span>
+    <h1>Custom Domains</h1>
+    <p class="lead">stack defaults new projects to <code>.localhost</code> because it resolves to loopback for free — no setup, no hosts file, no admin rights, since it's RFC 6761-special-cased. Coming from Herd or Laragon, you might prefer the shorter, more familiar <code>.test</code> instead. That works too — it just needs one one-time step first.</p>
+
+    <h2 id="why">Why this needs a step at all</h2>
+    <p><code>[project].domain</code> is fully free-form in <code>stack.toml</code> — <code>domain = "myapp.test"</code> works today with zero code change, since Caddy (the actual router stack drives) doesn't care what string it's given. The gap is DNS resolution: unlike <code>.localhost</code>, <code>.test</code> is reserved by RFC 2606 but your OS doesn't automatically route it to loopback. Herd and Laragon don't get this for free either — they quietly automate it for you (writing per-project entries into the hosts file, or running their own resolver). This page is that same one-time automation, done manually, once, for every <code>.test</code> subdomain at once.</p>
+
+    <div style="display:flex; gap:var(--space-2); flex-wrap:wrap; margin: var(--space-3) 0 var(--space-6);">
+      <span class="tag tag-accent">Windows — Acrylic DNS Proxy</span>
+      <span class="tag tag-outline">macOS/Linux — dnsmasq (stack not yet shipped there)</span>
+    </div>
+
+    <h2 id="windows">Windows: Acrylic DNS Proxy</h2>
+    <p>Acrylic is a small local DNS proxy that supports wildcard entries in a custom hosts-like file. Needs admin rights, one-time.</p>
+    <div class="step">
+      <span class="step-num">1</span>
+      <div class="step-body">
+        <h3>Install Acrylic</h3>
+        <p>Download and run the installer from the <a href="https://mayakron.altervista.org/support/acrylic/Home.htm" target="_blank" rel="noopener">official Acrylic DNS Proxy page</a>.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">2</span>
+      <div class="step-body">
+        <h3>Add a wildcard entry</h3>
+        <p>Open <code>AcrylicHosts.txt</code> (from the Acrylic UI's menu, or directly under its install folder) and add:</p>
+        <div class="blueprint term">
+          <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">AcrylicHosts.txt</span></div>
+          <pre class="term-body">127.0.0.1 *.test</pre>
+        </div>
+        <p>Restart the Acrylic service afterward (from its tray icon or Windows Services) so the change takes effect.</p>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">3</span>
+      <div class="step-body">
+        <h3>Point your network adapter at Acrylic</h3>
+        <p>Network and Sharing Center → Change adapter settings → your active adapter's Properties → Internet Protocol Version 4 (TCP/IPv4) → Properties → set <strong>Preferred DNS server</strong> to <code>127.0.0.1</code>. Do this for every adapter you actually use (Ethernet and Wi-Fi both, if you switch between them).</p>
+      </div>
+    </div>
+    <p>From here, any <code>*.test</code> domain resolves to loopback the same way <code>*.localhost</code> already did — including domains from projects you haven't created yet, since it's a wildcard, not a per-project entry.</p>
+
+    <h2 id="macos-linux">macOS/Linux: dnsmasq</h2>
+    <p style="font-size:13px;opacity:0.75;">stack only ships Windows builds today — this section is here for when that changes, and for anyone running stack's source build on these platforms in the meantime.</p>
+    <div class="step">
+      <span class="step-num">1</span>
+      <div class="step-body">
+        <h3>Install and configure dnsmasq</h3>
+        <div class="blueprint term">
+          <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">terminal</span></div>
+          <pre class="term-body"><span class="term-prompt">$</span> brew install dnsmasq
+<span class="term-prompt">$</span> echo 'address=/.test/127.0.0.1' >> $(brew --prefix)/etc/dnsmasq.conf
+<span class="term-prompt">$</span> sudo brew services start dnsmasq</pre>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <span class="step-num">2</span>
+      <div class="step-body">
+        <h3>Register <code>.test</code> as a resolver domain</h3>
+        <div class="blueprint term">
+          <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">terminal</span></div>
+          <pre class="term-body"><span class="term-prompt">$</span> sudo mkdir -p /etc/resolver
+<span class="term-prompt">$</span> echo "nameserver 127.0.0.1" | sudo tee /etc/resolver/test</pre>
+        </div>
+        <p>macOS routes any <code>*.test</code> lookup through <code>/etc/resolver/test</code> to dnsmasq from here on, system-wide — no per-app configuration.</p>
+      </div>
+    </div>
+    <p style="font-size:13px;opacity:0.75;">Avoid <code>.dev</code> (a real, ICANN-delegated TLD Google owns) and <code>.local</code> (claimed by Bonjour/mDNS on macOS) for this — <code>.test</code> is the one actually reserved for exactly this purpose.</p>
+
+    <h2 id="next">Next</h2>
+    <p>Once your TLD resolves, set it per-project the normal way: <code>domain = "myapp.test"</code> in <code>stack.toml</code>'s <code>[project]</code> section, or answer the domain prompt with it when running <code>stack new</code>/<code>stack init</code>. See the <a href="manifest.html">Manifest Reference</a> for the full <code>[project]</code> section.</p>
+  </main>
+</div>
+<script src="site.js"></script>
+</body>
+</html>
