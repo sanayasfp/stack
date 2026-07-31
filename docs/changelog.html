@@ -43,6 +43,31 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.1.26 — 2026-07-31</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.26" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>. Bundles what would otherwise have been 11 separate patch releases into one.</p>
+      <h2>Added</h2>
+      <ul>
+        <li><code>stack init</code> — scaffolds a manifest for an existing project, pre-filled from <code>composer.json</code>/<code>package.json</code>/<code>pyproject.toml</code> instead of typing every language/version from memory.</li>
+        <li><code>stack restart [name] [--all] [--yes]</code> and name-addressable <code>stack up &lt;name&gt;</code> — start/restart a project from anywhere, not just from inside it.</li>
+        <li><code>stack describe [name]</code> — prints a project's resolved environment (binary paths, <code>php.ini</code>, log location, routed domain/port) whether it's up or down.</li>
+        <li><code>stack doctor --project</code> — validates a manifest against live reality (ports, service paths, placeholders) before <code>stack up</code> runs, instead of failing one error at a time partway through.</li>
+        <li><code>stack clean</code> — removes cached <code>composer.phar</code> downloads.</li>
+        <li>Trust-on-first-use — the first <code>stack up</code> on a project, or the first run after its <code>[run]</code>/<code>[service.*]</code> commands change, asks for confirmation before executing anything. <code>--yes</code> bypasses this for CI/scripted use.</li>
+        <li>Automatic local HTTPS — <code>https://project.localhost</code> now works with no browser warning, via Caddy's own internal CA. Plain <code>http://</code> keeps working unchanged.</li>
+        <li><code>.env</code> auto-loading on <code>stack up</code>/<code>stack doctor --project</code> — no more forgetting the separate <code>stack load-env</code> step.</li>
+        <li>Fresh PHP installs are now configured automatically: commonly-needed extensions, OPcache, and dev-friendly <code>ini</code> defaults, instead of shipping vanilla, mostly-disabled defaults.</li>
+        <li><a href="why.html">docs/why.html</a> and <a href="custom-domains.html">docs/custom-domains.html</a> — new docs pages.</li>
+      </ul>
+      <h2>Fixed</h2>
+      <ul>
+        <li><code>[[clone]]</code> silently no-op'd on every <code>stack up</code> (its default <code>path</code> always pointed at a directory that trivially already existed). Now gated behind an explicit <code>--clone</code> flag, defaults to git's own folder-naming convention.</li>
+        <li><code>stack new</code>/<code>stack init</code>'s language/service selection used a yes/no loop where an accidental "yes" meant restarting the whole wizard. Replaced with checkboxes — nothing commits until you confirm.</li>
+        <li>CLI output had no color coding or visual separation between phases of a <code>stack up</code> run. <code>stack up</code>/<code>stack doctor</code> output is now color-coded, with blank-line phase breaks.</li>
+        <li>The docs site was not usable on mobile: a nav bar with no breakpoint, a terminal block that overflowed the page, and a sidebar with no way to collapse it. Manifest and CLI reference docs had also drifted out of sync with actual shipped behavior — both rewritten against the current source.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.15 — 2026-07-30</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.15" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>.</p>
       <h2>Fixed</h2>
