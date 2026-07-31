@@ -48,9 +48,7 @@ pub fn risky_fields(manifest: &Manifest) -> String {
     lines.join("\n")
 }
 
-/// Confirms (once per distinct set of risky commands) before a project's
-/// `[run].command`/`[service.*].command` can execute. `auto_yes` bypasses
-/// the interactive prompt and records approval directly.
+/// Confirms once per distinct set of risky commands before they can execute; `auto_yes` skips the prompt.
 pub fn ensure_trusted(project_dir: &Path, manifest: &Manifest, auto_yes: bool) -> Result<()> {
     let risky = risky_fields(manifest);
     if risky.is_empty() {

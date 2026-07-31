@@ -74,12 +74,7 @@ pub fn ensure_running(state: &mut State) -> Result<()> {
         bail!("caddy started but its admin API never became reachable");
     }
 
-    // Single server listening on both :80 and :443 -- routes are unchanged
-    // by this (they match on `host`, not on listener), so plain http://
-    // keeps working exactly as before while https:// becomes available
-    // too, no redirect forced either way. The TLS automation policy has no
-    // `subjects` filter, so it applies the internal CA issuer to whatever
-    // hostname is requested over TLS, not just a fixed list.
+    // Listens on both :80 and :443; routes match on `host`, unaffected by which port is used.
     let base = serde_json::json!({
         "apps": {
             "http": { "servers": { "srv0": { "listen": [":80", ":443"], "routes": [] } } },

@@ -305,9 +305,7 @@ fn process_clones(project_dir: &Path, clones: &[CloneEntry]) -> Result<()> {
     Ok(())
 }
 
-/// Loads a project's .env into the process environment, if present, so
-/// placeholder resolution and stack doctor --project see the same values a
-/// manual `stack load-env` would have provided.
+/// Loads a project's .env into the process environment, if present.
 pub(crate) fn auto_load_dotenv(project_dir: &Path) {
     let env_path = project_dir.join(".env");
     if !env_path.is_file() {

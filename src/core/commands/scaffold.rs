@@ -57,9 +57,7 @@ fn build_manifest_toml(name: &str, domain: &str, languages: &[(String, String)],
 const KNOWN_LANGUAGES: &[&str] = &["php", "node", "python"];
 const KNOWN_SERVICES: &[&str] = &["mysql", "postgres", "mongo", "redis", "meilisearch"];
 
-/// Checkbox multi-select: toggle with space, arrows to move, enter to
-/// confirm. Nothing is committed until enter, so an accidental toggle is
-/// just toggled back, not a reason to restart the whole wizard.
+/// Checkbox multi-select: space to toggle, enter to confirm.
 fn select_checkboxes(prompt: &str, known: &[&str], preselected: &[String]) -> Result<Vec<String>> {
     let items: Vec<String> = known.iter().map(|s| s.to_string()).collect();
     let defaults: Vec<bool> = items.iter().map(|item| preselected.contains(item)).collect();
@@ -92,11 +90,9 @@ fn ask_version(kind: &str, name: &str, default: Option<&str>) -> Result<String> 
     input.interact_text().with_context(|| format!("failed to read {kind} version for {name}"))
 }
 
-/// Checkbox-select languages and services, ask a version for each selected
-/// one (pre-filled from `detected` when available), plus a small loop for
-/// anything not in the common list.
 type NameVersionPairs = Vec<(String, String)>;
 
+/// Checkbox-selects languages and services, asking a version for each (pre-filled from `detected`).
 fn select_languages_and_services(detected: &[DetectedLanguage]) -> Result<(NameVersionPairs, NameVersionPairs)> {
     let detected_names: Vec<String> = detected.iter().map(|d| d.name.to_string()).collect();
 
@@ -160,8 +156,7 @@ fn needs_tld_setup(domain: &str) -> bool {
     domain != "localhost" && !domain.ends_with(".localhost")
 }
 
-/// Only `.localhost` resolves with no setup. Any other TLD (e.g. `.test`)
-/// needs a one-time local DNS step -- print where to find it.
+/// Prints where to find the one-time local DNS setup step for non-`.localhost` domains.
 fn suggest_tld_setup(domain: &str) {
     if !needs_tld_setup(domain) {
         return;
@@ -179,8 +174,7 @@ struct DetectedLanguage {
     source: &'static str,
 }
 
-/// Strips a leading constraint operator (^, ~, >=, >, <=, <, =) and trailing
-/// wildcard/range noise, keeping just the leading numeric dotted version.
+/// Strips a leading constraint operator (^, ~, >=, etc.) and trailing range noise.
 fn extract_version_constraint(raw: &str) -> Option<String> {
     let trimmed = raw.trim().trim_start_matches(['^', '~', '>', '<', '=']).trim();
     let core: String = trimmed.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
