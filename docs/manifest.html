@@ -22,7 +22,7 @@
 <nav class="nav site-nav">
   <a href="index.html" class="nav-lockup"><img class="nav-mark" src="assets/logo.svg" alt="" /><span class="nav-brand">stack</span></a>
   <div class="nav-links">
-    <a href="getting-started.html" aria-current="page">Docs</a>
+    <a href="why.html">Docs</a>
     <a href="changelog.html">Changelog</a>
     <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
   </div>
@@ -37,6 +37,7 @@
   <aside class="docs-side">
     <div class="side-group">
       <h6>Guide</h6>
+      <a href="why.html">Why stack?</a>
       <a href="getting-started.html">Getting Started</a>
       <a href="custom-domains.html">Custom Domains</a>
     </div>
@@ -76,17 +77,32 @@ domain = "acme-api.localhost"</pre>
     </div>
 
     <h2 id="clone">[[clone]]</h2>
-    <p>Array of tables. Lets a bare <code>stack.toml</code>, dropped in an empty folder, bootstrap the whole project — <code>stack up</code> clones anything missing before doing anything else, and never touches a path that already exists.</p>
+    <p>Array of tables. Lets a bare <code>stack.toml</code> — the only file someone needs to bootstrap your whole project — declare which git repos to fetch. Only runs when <code>stack up</code> is given <code>--clone</code>; plain <code>stack up</code> never touches git, so cloning is something you opt into and can review, not a side effect that happens silently on every run.</p>
     <div class="table-wrap">
     <table class="table field-table">
       <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr><td>repo</td><td>string</td><td><em>required</em></td><td>Anything <code>git clone</code> accepts.</td></tr>
-        <tr><td>path</td><td>string</td><td><span class="default-tag">"."</span></td><td>Where it's cloned to, relative to the project root.</td></tr>
+        <tr><td>repo</td><td>string</td><td><em>required</em></td><td>Anything <code>git clone</code> accepts (SSH or HTTPS).</td></tr>
+        <tr><td>path</td><td>string</td><td><span class="default-tag">derived from repo</span></td><td>Where it's cloned to, relative to the project root. Unset, it's git's own default naming — the repo URL's last path segment with <code>.git</code> stripped, so <code>git@github.com:acme/api.git</code> lands in <code>./api</code>. Set it to rename the folder, or to <code>"."</code> to clone directly into the project root (see below).</td></tr>
         <tr><td>ref</td><td>string</td><td><span class="default-tag">default branch</span></td><td>Branch, tag, or commit SHA — cloned, then checked out separately (checkout accepts all three; <code>--branch</code> alone doesn't).</td></tr>
       </tbody>
     </table>
     </div>
+    <div class="blueprint term">
+      <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">stack.toml</span></div>
+      <pre class="term-body">[[clone]]
+repo = "git@github.com:acme/api.git"   # -> ./api, git's own default naming
+
+[[clone]]
+repo = "git@github.com:acme/shared-lib.git"
+path = "vendor/shared-lib"              # explicit override</pre>
+    </div>
+
+    <h3 id="clone-in-place">Cloning into the project root</h3>
+    <p>Someone shares just a <code>stack.toml</code> with <code>path = "."</code>. They drop it in an empty folder and run <code>stack up --clone</code> — but that folder already has <code>stack.toml</code> in it, so it isn't actually empty, and <code>git clone</code> refuses to clone into a non-empty directory. stack handles this case specifically: instead of <code>git clone</code>, it runs <code>git init</code> + <code>git remote add</code> + <code>git fetch</code> + <code>git checkout</code> in place. If the fetched repo also tracks its own <code>stack.toml</code>, checkout fails loudly on the real conflict rather than silently picking a winner — that's the correct outcome, not a bug to work around.</p>
+
+    <h3 id="clone-idempotency">Running --clone more than once</h3>
+    <p>Safe. An entry with an explicit or derived <code>path</code> is skipped once that directory exists. The <code>path = "."</code> case checks for a <code>.git</code> folder instead (since the project directory itself always exists, trivially) — already-initialized is left untouched either way.</p>
 
     <h2 id="language">[language.&lt;name&gt;]</h2>
     <p>Either a bare version string, or a table when you need more control — both forms can coexist as siblings, same as <code>Cargo.toml</code>'s <code>[dependencies]</code>.</p>
@@ -109,6 +125,7 @@ manager = "vfox"</pre>
         <tr><td>plugin</td><td>string</td><td><span class="default-tag">the table key</span></td><td>vfox plugin name override, for the rare mismatch (e.g. Node's plugin is named <code>nodejs</code>).</td></tr>
         <tr><td>binary</td><td>string</td><td><span class="default-tag">{name}.exe</span></td><td>Binary filename override.</td></tr>
         <tr><td>path</td><td>string</td><td>—</td><td>BYO — a fixed, already-resolved binary. Bypasses vfox/uv entirely.</td></tr>
+        <tr><td>workers</td><td>number</td><td><span class="default-tag">4</span></td><td>PHP only. Sets <code>PHP_FCGI_CHILDREN</code> for stack's default FastCGI execution (see <a href="#run-php-default">below</a>) — how many concurrent <code>php-cgi</code> worker processes handle requests for this project. Raise it for a project doing real concurrent local load-testing; the default of 4 is plenty for normal day-to-day browsing.</td></tr>
       </tbody>
     </table>
     </div>
@@ -141,13 +158,16 @@ schema = "acme_api"   # optional — defaults to the project name</pre>
     <table class="table field-table">
       <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr><td>command</td><td>string</td><td><em>required unless <code>external</code></em></td><td><code>{port}</code> is substituted; <code>PORT</code> is also set as an env var, for anything reading <code>process.env.PORT</code>.</td></tr>
+        <tr><td>command</td><td>string</td><td><em>required unless <code>external</code>, or <code>[language.php]</code> is declared</em></td><td><code>{port}</code> is substituted; <code>PORT</code> is also set as an env var, for anything reading <code>process.env.PORT</code>. See below if omitted with PHP declared.</td></tr>
         <tr><td>port</td><td>number or <code>"{VAR}"</code></td><td><span class="default-tag">ephemeral</span></td><td>Pin it if anything (OAuth callback, CORS allowlist, a proxy target) hardcodes the port — stack errors clearly rather than silently picking a different one when it's taken. A quoted <code>"{VAR}"</code> resolves like a <code>command</code> placeholder — see below.</td></tr>
         <tr><td>cwd</td><td>string</td><td><span class="default-tag">project root</span></td><td>Which cloned path the command runs in — matters once <code>[[clone]]</code> has more than one entry.</td></tr>
         <tr><td>external</td><td>bool</td><td><span class="default-tag">false</span></td><td>Run the dev server yourself, in your own terminal — stack only validates the port and routes to it, never spawns or tracks the process. <code>port</code> becomes required. See below.</td></tr>
       </tbody>
     </table>
     </div>
+
+    <h3 id="run-php-default">Omitting <code>command</code> for PHP</h3>
+    <p>When <code>[language.php]</code> is declared and <code>command</code> is left out, stack defaults to its own FastCGI execution: <code>php-cgi.exe</code> with real concurrent worker processes, fronted by a Caddy FastCGI route, doc-root auto-detected (<code>public/</code> if it has an <code>index.php</code>, otherwise the project root). This is the same "sensible default when omitted" pattern <code>[service.*]</code> already has for mysql/postgres/mongo, just for <code>[run]</code>. Set <code>command</code> explicitly (e.g. <code>php -S 127.0.0.1:{port} -t public</code>) if you need something other than FastCGI, or if the install is non-standard and doesn't ship <code>php-cgi.exe</code> next to <code>php.exe</code>.</p>
 
     <h3 id="run-external">Why <code>[run].external</code> exists</h3>
     <p>Sometimes you'd rather run the dev server yourself — watch its own output directly in your own terminal, keep whatever reload workflow you already use, or just not hand the process over to another supervisor. <code>external = true</code> is built for that: stack's only job becomes routing a real domain to the port you tell it about.</p>
@@ -157,6 +177,9 @@ schema = "acme_api"   # optional — defaults to the project name</pre>
 external = true
 port = 8000</pre>
     </div>
+
+    <h3 id="run-trust">Why the first stack up on a project asks you to confirm</h3>
+    <p><code>command</code> here (and every <code>[service.*].command</code>) is a literal program invocation — stack runs it exactly as written. The first time a project's commands are seen, or the first time they change, <code>stack up</code> prints them and asks you to confirm before anything actually executes; declining aborts cleanly with nothing spawned. Approval is remembered in <code>~/.stack/trust.json</code>, so unchanged commands never prompt again on later runs. Pass <code>--yes</code> to approve without the interactive prompt, for CI or scripted use. Full detail in the <a href="cli.html">CLI Reference</a>'s <code>stack up</code> entry.</p>
 
     <h2 id="tool">[tool.&lt;name&gt;]</h2>
     <div class="table-wrap">
@@ -170,9 +193,47 @@ port = 8000</pre>
     </div>
 
     <h2 id="placeholders">Placeholders</h2>
-    <p>Any <code>{VAR_NAME}</code> inside a <code>command</code> string resolves in order: reserved keywords (<code>{port}</code>, <code>{data_dir}</code>, <code>{path}</code>) first, then the process environment, then — only with <code>stack up --prompt</code> — an interactive prompt, masked for anything that looks like a secret. Nothing left unresolved fails silently: every unresolved name is reported together, not one at a time.</p>
+    <p>Any <code>{VAR_NAME}</code> inside a <code>command</code> string resolves in order: reserved keywords (<code>{port}</code>, <code>{data_dir}</code>, <code>{path}</code>) first, then the process environment (including a project's own <code>.env</code>, loaded automatically before resolution), then — only with <code>stack up --prompt</code> — an interactive prompt, masked for anything that looks like a secret. Nothing left unresolved fails silently: every unresolved name is reported together, not one at a time.</p>
     <p>A <code>port</code> field can be a quoted placeholder too — e.g. <code>port = "{MEILISEARCH_PORT}"</code> — resolved the same way (environment, then prompt) and parsed as a number afterward. Reserved keywords aren't available here, since <code>port</code> is itself the thing being resolved; an unquoted number always skips resolution entirely.</p>
 
+    <h2 id="full-example">Putting it together</h2>
+    <p>A single manifest combining most of the above — two languages, one managed service, one external service, a clone entry, and a custom <code>[run]</code> command:</p>
+    <div class="blueprint term">
+      <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">stack.toml</span></div>
+      <pre class="term-body">[project]
+name = "acme-api"
+domain = "acme-api.localhost"
+
+[[clone]]
+repo = "git@github.com:acme/acme-api.git"   # -&gt; ./acme-api
+
+[language]
+node = "20.11.0"   # simple form: no other options needed
+
+[language.php]      # detailed form: php needs workers set, so it gets its own table
+version = "8.3.1"
+workers = 8          # raised from the default 4 for a local load test
+
+[service.mysql]
+version = "8.0.35"
+schema = "acme_api"
+
+[service.redis]
+version = "7.2"
+external = true
+port = 6379
+
+[run]
+command = "php -S 127.0.0.1:{port} -t public"
+port = 8000
+cwd = "acme-api"</pre>
+    </div>
+    <p style="font-size:13px;opacity:0.75;">A language can use the simple string form <em>or</em> the detailed table form, never both for the same name — <code>[language]</code>'s <code>php = "8.3.1"</code> and a separate <code>[language.php]</code> table would collide on the same TOML key and fail to parse. Once you need any detailed-form field (here, <code>workers</code>), <code>version</code> moves into that same table.</p>
+
+    <nav class="docs-pager">
+      <a href="custom-domains.html"><span class="pager-dir">Previous</span><span class="pager-title">← Custom Domains</span></a>
+      <a href="cli.html"><span class="pager-dir">Next</span><span class="pager-title">CLI Reference →</span></a>
+    </nav>
   </main>
 </div>
 <script src="site.js"></script>

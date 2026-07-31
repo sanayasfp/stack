@@ -147,7 +147,7 @@ footer { padding: calc(1.5 * var(--leading)) 0; display: flex; justify-content: 
 footer a { color: inherit; }
 
 @media (max-width: 880px) {
-  .cells { grid-template-columns: 1fr; gap: calc(var(--leading) + 16px); }
+  .cells { grid-template-columns: minmax(0, 1fr); gap: calc(var(--leading) + 16px); }
 }
 @media (max-width: 720px) {
   .tb-title { flex-basis: 100%; border-bottom: 1px solid var(--color-divider); }
@@ -166,7 +166,7 @@ footer a { color: inherit; }
   .spec .s-num { grid-column: 1; }
   .spec .s-prop { grid-column: 2; }
   .spec .s-val, .spec .s-rem { grid-column: 1 / -1; }
-  .split { grid-template-columns: 1fr; }
+  .split { grid-template-columns: minmax(0, 1fr); }
   .split-figure { order: -1; }
 }
 </style>
@@ -175,7 +175,7 @@ footer a { color: inherit; }
 <nav class="nav site-nav">
   <a href="index.html" class="nav-lockup" aria-current="page"><img class="nav-mark" src="assets/logo.svg" alt="" /><span class="nav-brand">stack</span></a>
   <div class="nav-links">
-    <a href="getting-started.html">Docs</a>
+    <a href="why.html">Docs</a>
     <a href="changelog.html">Changelog</a>
     <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
   </div>
@@ -264,12 +264,14 @@ footer a { color: inherit; }
 <pre class="term-body"><span class="term-prompt">$</span> stack up
 Loaded C:\Users\you\acme-api\stack.toml
   project: acme-api
-  languages: ["php"]
-  services: ["mysql"]
-  php: C:\Users\you\.vfox\...\php.exe -&gt; PHP 8.3.1 (cli)
-  service.mysql: already running, shared with other projects (pid 41232, port 3306)
-  run: php -S 127.0.0.1:52140 -t public  (pid 41244, port 52140)
-  routed: http://acme-api.localhost -&gt; 127.0.0.1:52140</pre>
+  languages: php
+  services: mysql
+  php: <span class="term-ok">C:\Users\you\.vfox\...\php.exe -&gt; PHP 8.3.1 (cli)</span>
+
+  service.mysql: <span class="term-ok">already running, shared with other projects (pid 41232, port 3306)</span>
+
+  run: <span class="term-ok">php -S 127.0.0.1:52140 -t public  (pid 41244, port 52140)</span>
+  routed: <span class="term-ok">http://acme-api.localhost -&gt; 127.0.0.1:52140</span></pre>
     </figure>
   </section>
 
@@ -294,7 +296,7 @@ Loaded C:\Users\you\acme-api\stack.toml
 
   <footer>
     <span>stack — native, zero-container multi-project dev environment manager. No Docker, no VMs. MIT OR Apache-2.0.</span>
-    <span><a href="getting-started.html">Docs</a> · <a href="manifest.html">Manifest</a> · <a href="cli.html">CLI</a> · <a href="https://github.com/sanayasfp/stack/tree/main/examples" target="_blank" rel="noopener">Examples</a> · <a href="changelog.html">Changelog</a> · <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a></span>
+    <span><a href="why.html">Docs</a> · <a href="manifest.html">Manifest</a> · <a href="cli.html">CLI</a> · <a href="https://github.com/sanayasfp/stack/tree/main/examples" target="_blank" rel="noopener">Examples</a> · <a href="changelog.html">Changelog</a> · <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a></span>
   </footer>
 </div>
 <script src="site.js"></script>

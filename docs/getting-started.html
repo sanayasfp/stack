@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Getting Started — stack docs</title>
-<meta name="description" content="Install stack, run stack setup once, and activate your first project." />
+<meta name="description" content="Install stack, run stack setup once, and bring up your first project in three commands." />
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="styles.css" />
 <style>
@@ -25,7 +25,7 @@
 <nav class="nav site-nav">
   <a href="index.html" class="nav-lockup"><img class="nav-mark" src="assets/logo.svg" alt="" /><span class="nav-brand">stack</span></a>
   <div class="nav-links">
-    <a href="getting-started.html" aria-current="page">Docs</a>
+    <a href="why.html">Docs</a>
     <a href="changelog.html">Changelog</a>
     <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
   </div>
@@ -40,6 +40,7 @@
   <aside class="docs-side">
     <div class="side-group">
       <h6>Guide</h6>
+      <a href="why.html">Why stack?</a>
       <a href="getting-started.html" aria-current="page">Getting Started</a>
       <a href="custom-domains.html">Custom Domains</a>
     </div>
@@ -59,7 +60,7 @@
   <main class="docs-main">
     <span class="kicker" style="display:block;font-family:var(--font-heading);font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--color-accent-700);margin-bottom:8px;">Guide</span>
     <h1>Getting Started</h1>
-    <p class="lead">stack runs your project's languages, databases, and dev server as plain processes and routes a real local domain to whichever one you're working on — no containers, no idle hypervisor, nothing running you didn't ask for.</p>
+    <p class="lead">Three commands: install stack, run <code>stack setup</code> once, then <code>stack up</code> inside any project. That's the whole workflow.</p>
     <div style="display:flex; gap:var(--space-2); flex-wrap:wrap; margin: var(--space-3) 0 var(--space-6);">
       <span class="tag tag-accent">Windows — PowerShell &amp; cmd</span>
       <span class="tag tag-outline">macOS — coming soon</span>
@@ -67,67 +68,57 @@
     </div>
 
     <h2 id="install">1. Install</h2>
-    <p>Available now:</p>
     <div class="blueprint term">
       <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">powershell installer</span></div>
       <pre class="term-body"><span class="term-prompt">$</span> irm https://github.com/sanayasfp/stack/releases/latest/download/stackenv-installer.ps1 | iex</pre>
     </div>
-    <div class="blueprint term">
-      <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">cargo</span></div>
-      <pre class="term-body"><span class="term-prompt">$</span> cargo install stackenv</pre>
-    </div>
-    <p style="font-size:13px;opacity:0.75;">The crate is published as <code>stackenv</code> (<code>stack</code> was already taken on crates.io by an unrelated project) — it still installs a <code>stack</code> command.</p>
-    <p>Or grab the zip directly from the <a href="https://github.com/sanayasfp/stack/releases/latest" target="_blank" rel="noopener">latest release</a> and extract it yourself.</p>
-    <p style="font-size:13px;opacity:0.75;">winget, Scoop, and Chocolatey packages are coming soon — not published yet.</p>
+    <p>Already have Rust? <code>cargo install stackenv</code> works too — the crate is published as <code>stackenv</code> since <code>stack</code> was already taken on crates.io, but it installs a plain <code>stack</code> command either way.</p>
 
     <h2 id="setup">2. Run <code>stack setup</code></h2>
-    <p>One command, once. It wires the shell hook into your PowerShell profile (so activation runs on every prompt) and installs the three tools stack delegates to — <a href="https://github.com/version-fox/vfox" target="_blank" rel="noopener">vfox</a>, <a href="https://github.com/astral-sh/uv" target="_blank" rel="noopener">uv</a>, and <a href="https://caddyserver.com" target="_blank" rel="noopener">Caddy</a> — at the pinned versions stack is built and tested against.</p>
+    <p>One command, once per machine. It hooks into your PowerShell profile so your project's toolchain activates automatically every time you <code>cd</code> in, and installs the three tools stack runs on top of — <a href="https://github.com/version-fox/vfox" target="_blank" rel="noopener">vfox</a>, <a href="https://github.com/astral-sh/uv" target="_blank" rel="noopener">uv</a>, and <a href="https://caddyserver.com" target="_blank" rel="noopener">Caddy</a>.</p>
     <div class="blueprint term">
       <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">powershell</span></div>
       <pre class="term-body"><span class="term-prompt">$</span> stack setup
 added the stack hook for pwsh
 checking vfox/uv/caddy...
-  vfox: OK (1.0.11)
-  uv: OK (0.11.7)
-  caddy: OK (2.11.4)
-tip: for curl/Postman/non-browser clients to also resolve *.localhost, consider
-Acrylic DNS Proxy (optional, one-time, needs admin rights)</pre>
+  vfox: <span class="term-ok">OK</span> (1.0.11)
+  uv: <span class="term-ok">OK</span> (0.11.7)
+  caddy: <span class="term-ok">OK</span> (2.11.4)
+  caddy: <span class="term-ok">local CA trusted (https://*.localhost works with no browser warning)</span></pre>
     </div>
-    <p>Restart your terminal (or reload <code>$PROFILE</code>) once, so the new hook takes effect in the current session.</p>
+    <p>Restart your terminal once (or reload <code>$PROFILE</code>) so the hook takes effect. You won't need to run <code>stack setup</code> again unless you switch machines.</p>
 
     <h2 id="first-project">3. Create a project</h2>
     <div class="step">
       <span class="step-num">1</span>
       <div class="step-body">
         <h3>Scaffold a manifest</h3>
+        <p>Starting fresh, <code>stack new</code> asks a few questions with checkboxes for language/service selection — nothing commits until you confirm, so a misclick is a toggle, not a restart. Already have a <code>composer.json</code> or <code>package.json</code>? Run <code>stack init</code> instead — it reads the version you've already declared there instead of asking you to retype it.</p>
         <div class="blueprint term">
           <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">powershell</span></div>
           <pre class="term-body"><span class="term-prompt">$</span> stack new acme-api
 domain: acme-api.localhost
-Add a language? yes
-  language name (e.g. php, node, python): php
-  version: 8.3.1
-Add a language? no
-Add a service? yes
-  service name (e.g. mysql, postgres, mongo): mysql
-  version: 8.0.35
-Add a service? no
+languages (space to toggle, enter to confirm): [x] php
+services (space to toggle, enter to confirm): [x] mysql
+  php version: 8.3.1
+  mysql version: 8.0.35
 created acme-api\stack.toml
 next: cd into it, add a [run] command when you know it, then `stack up`</pre>
         </div>
-        <p><code>stack new</code> prompts you through it interactively and writes a commented <code>stack.toml</code>. You can also hand-write one — see the <a href="manifest.html">Manifest Reference</a>.</p>
+        <p>You can also hand-write <code>stack.toml</code> directly — see the <a href="manifest.html">Manifest Reference</a> for every field.</p>
       </div>
     </div>
     <div class="step">
       <span class="step-num">2</span>
       <div class="step-body">
         <h3>Add how it runs</h3>
-        <p>Open <code>stack.toml</code> and set <code>[run]</code> — the one process that needs a stable URL, usually your app's own dev server:</p>
+        <p>Open <code>stack.toml</code> and set <code>[run]</code> to whatever starts your app's dev server. This is the one process that gets a real, stable URL:</p>
         <div class="blueprint term">
           <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">acme-api/stack.toml</span></div>
           <pre class="term-body">[run]
 command = "php -S 127.0.0.1:{port} -t public"</pre>
         </div>
+        <p style="font-size:13px;opacity:0.75;">Plain PHP with no <code>[run]</code> at all also works — stack defaults to its own FastCGI engine automatically when <code>[language.php]</code> is declared.</p>
       </div>
     </div>
     <div class="step">
@@ -141,29 +132,36 @@ command = "php -S 127.0.0.1:{port} -t public"</pre>
 Loaded C:\Users\you\acme-api\stack.toml
   project: acme-api
   domain: acme-api.localhost
-  languages: ["php"]
-  services: ["mysql"]
-  php: C:\Users\you\.vfox\cache\php\v-8.3.1\...\php.exe -&gt; PHP 8.3.1 (cli)
-  service.mysql: started (pid 41232, port 3306)
-    schema 'acme_api' — automatic creation not yet implemented; create it manually if needed
-  run: php -S 127.0.0.1:52140 -t public  (pid 41244, port 52140)
+  languages: php
+  services: mysql
+  php: <span class="term-ok">C:\Users\you\.vfox\cache\php\v-8.3.1\...\php.exe -&gt; PHP 8.3.1 (cli)</span>
+
+  service.mysql: <span class="term-ok">started (pid 41232, port 3306)</span>
+
+  run: <span class="term-ok">php -S 127.0.0.1:52140 -t public  (pid 41244, port 52140)</span>
   log: C:\Users\you\.stack\logs\acme-api.log
-  routed: http://acme-api.localhost -&gt; 127.0.0.1:52140</pre>
+  routed: <span class="term-ok">http://acme-api.localhost -&gt; 127.0.0.1:52140</span></pre>
         </div>
+        <p>That URL works over <code>https://</code> too, with no browser warning — stack wires up a local CA through Caddy the first time it runs.</p>
       </div>
     </div>
 
     <h2 id="ambient">4. Everyday use</h2>
-    <p>Once <code>stack setup</code> has run, activation is ambient — no daemon to remember to start. <code>cd</code> into any folder with a <code>stack.toml</code> and your pinned <code>php</code>/<code>node</code>/<code>python</code> are already first on <code>PATH</code>, for anything you run by hand: <code>composer install</code>, <code>npm install</code>, a test runner. Leave the folder and <code>PATH</code> resets. You only need <code>stack up</code> for the one process that needs a real routed domain and needs to keep running without a terminal watching it.</p>
-    <p>When you're done for the day:</p>
+    <p>Once <code>stack setup</code> has run, activation is ambient — there's no daemon to remember to start. <code>cd</code> into any folder with a <code>stack.toml</code> and its pinned <code>php</code>/<code>node</code>/<code>python</code> are already first on <code>PATH</code>, for anything you run by hand: <code>composer install</code>, <code>npm install</code>, a test runner. Leave the folder and <code>PATH</code> resets behind you. <code>stack up</code> is only for the one process that needs a real routed domain and needs to keep running without a terminal watching it.</p>
+    <p>Done for the day:</p>
     <div class="blueprint term">
       <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">powershell</span></div>
       <pre class="term-body"><span class="term-prompt">$</span> stack down --all</pre>
     </div>
-    <p>Stops every project process and every shared service — the actual 0% CPU point, not just the one project you were looking at.</p>
+    <p>Stops every project and every shared service at once — the actual 0% CPU point, not just the one project you happened to be looking at.</p>
 
     <h2 id="next">Next</h2>
-    <p><a href="manifest.html">Manifest Reference</a> — every <code>stack.toml</code> field, with defaults. <a href="cli.html">CLI Reference</a> — every subcommand. <a href="https://github.com/sanayasfp/stack/tree/main/examples" target="_blank" rel="noopener">Examples</a> — four real projects (FastAPI, Node, React, Laravel), each showing a different part of the manifest instead of the same happy path four times.</p>
+    <p><a href="why.html">Why stack?</a> — the case for it over Docker-based tools and XAMPP/manual setups. <a href="manifest.html">Manifest Reference</a> — every <code>stack.toml</code> field, with defaults. <a href="cli.html">CLI Reference</a> — every subcommand. <a href="https://github.com/sanayasfp/stack/tree/main/examples" target="_blank" rel="noopener">Examples</a> — four real projects (FastAPI, Node, React, Laravel), each showing a different part of the manifest instead of the same happy path four times.</p>
+
+    <nav class="docs-pager">
+      <a href="why.html"><span class="pager-dir">Previous</span><span class="pager-title">← Why stack?</span></a>
+      <a href="custom-domains.html"><span class="pager-dir">Next</span><span class="pager-title">Custom Domains →</span></a>
+    </nav>
   </main>
 </div>
 <script src="site.js"></script>

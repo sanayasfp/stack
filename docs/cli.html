@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CLI Reference — stack docs</title>
-<meta name="description" content="Every stack subcommand." />
+<meta name="description" content="Every stack subcommand and flag, with what it does and why it exists." />
 <link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="styles.css" />
 <style>
@@ -18,13 +18,18 @@
 .cmd h3 code { background: none; }
 .cmd p { margin: var(--space-2) 0 0; font-size: 14px; opacity: 0.85; }
 .cmd .alias { font-size: 12px; opacity: 0.6; margin-left: 8px; font-weight: 400; }
+.cmd .why { margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--color-divider); font-size: 13px; }
+.cmd .why strong { font-family: var(--font-heading); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-accent-700); display: block; margin-bottom: 4px; }
+.flags { margin: var(--space-2) 0 0; font-size: 13.5px; }
+.flags dt { font-family: var(--font-heading); font-size: 12.5px; margin-top: 6px; }
+.flags dd { margin: 2px 0 0; opacity: 0.85; }
 </style>
 </head>
 <body>
 <nav class="nav site-nav">
   <a href="index.html" class="nav-lockup"><img class="nav-mark" src="assets/logo.svg" alt="" /><span class="nav-brand">stack</span></a>
   <div class="nav-links">
-    <a href="getting-started.html" aria-current="page">Docs</a>
+    <a href="why.html">Docs</a>
     <a href="changelog.html">Changelog</a>
     <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
   </div>
@@ -39,6 +44,7 @@
   <aside class="docs-side">
     <div class="side-group">
       <h6>Guide</h6>
+      <a href="why.html">Why stack?</a>
       <a href="getting-started.html">Getting Started</a>
       <a href="custom-domains.html">Custom Domains</a>
     </div>
@@ -58,33 +64,189 @@
   <main class="docs-main">
     <span class="kicker" style="display:block;font-family:var(--font-heading);font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--color-accent-700);margin-bottom:8px;">Reference</span>
     <h1>CLI Reference</h1>
-    <p class="lead">Every <code>stack</code> subcommand. Flags shown in <code>[brackets]</code> are optional.</p>
+    <p class="lead">Every <code>stack</code> subcommand, every flag it currently takes, and — wherever the answer isn't obvious from the name — why it works the way it does.</p>
 
     <h2>Project lifecycle</h2>
-    <div class="cmd"><h3><code>stack new &lt;name&gt;</code> / <code>stack new .</code></h3><p>Interactive scaffolding. <code>stack new .</code> targets the current directory and refuses to run if a <code>stack.toml</code> is already there.</p></div>
-    <div class="cmd"><h3><code>stack up [dir] [--prompt]</code></h3><p>Clones anything declared in <code>[[clone]]</code> that's missing, activates languages, starts declared services, spawns <code>[run]</code>, and routes the domain. Defaults to the current directory. <code>--prompt</code> allows interactive prompting for unresolved command placeholders.</p></div>
-    <div class="cmd"><h3><code>stack down [project] [--all]</code></h3><p>Stops that project's <code>[run]</code> process and removes its route. Shared services keep running for other projects unless <code>--all</code> is passed, which stops every project and every shared service — the true end-of-day shutdown.</p></div>
-    <div class="cmd"><h3><code>stack status</code> <span class="alias">alias: stack ps</span></h3><p>Lists every running project, service, and Caddy's own liveness/route count. Self-healing — drops entries whose process is no longer alive.</p></div>
-    <div class="cmd"><h3><code>stack stats [--no-stream]</code></h3><p>Continuously-refreshing CPU/memory view, <code>docker stats</code>-style. <code>--no-stream</code> for a single snapshot.</p></div>
-    <div class="cmd"><h3><code>stack logs &lt;name&gt; [--tail N] [-f/--follow]</code></h3><p>Reads a project's or service's log file directly — works even after it's stopped, since it doesn't depend on the running-state list.</p></div>
+
+    <div class="cmd">
+      <h3><code>stack new &lt;target&gt;</code></h3>
+      <p>Interactive scaffolding for a brand-new project.</p>
+      <dl class="flags"><dt><code>target</code></dt><dd>Required. Directory to create the project in — <code>.</code> to scaffold in the current directory, or a new folder name to create. Refuses to run if a <code>stack.toml</code> is already there, so it never overwrites one by accident.</dd></dl>
+      <p>Languages and services are chosen from a checkbox list (space to toggle, enter to confirm) instead of a yes/no loop — nothing is committed until you confirm, so toggling the wrong box is a toggle, not a reason to start over.</p>
+    </div>
+
+    <div class="cmd">
+      <h3><code>stack init</code></h3>
+      <p>Same scaffolding wizard as <code>stack new</code>, but for a project that already exists. Scans the current directory for <code>composer.json</code> (<code>require.php</code>), <code>package.json</code> (<code>engines.node</code>), and <code>pyproject.toml</code> (<code>project.requires-python</code> or Poetry's <code>tool.poetry.dependencies.python</code>) and pre-fills whatever version constraints it finds instead of asking you to retype them from memory.</p>
+      <dl class="flags"><dt>No arguments or flags.</dt><dd>Always operates on the current directory; refuses if <code>stack.toml</code> already exists, same as <code>stack new</code>.</dd></dl>
+    </div>
+
+    <div class="cmd">
+      <h3><code>stack up [target] [--prompt] [--clone] [--yes]</code></h3>
+      <p>Activates languages, starts declared services, spawns <code>[run]</code>, and routes the domain through Caddy (both <code>http://</code> and <code>https://</code>).</p>
+      <dl class="flags">
+        <dt><code>target</code></dt><dd>Defaults to <code>.</code>. Resolved as a directory first (so <code>stack up .</code> and <code>stack up ../other-project</code> keep working exactly as before) — only if that fails does it check whether <code>target</code> matches the name of a project stack has seen before, letting you run <code>stack up my-project</code> from anywhere, not just from inside it or via an explicit path.</dd>
+        <dt><code>--prompt</code></dt><dd>Allows interactive prompting for a <code>{PLACEHOLDER}</code> in <code>command</code>/<code>port</code> that isn't set in your environment. Without it, an unresolved placeholder is a hard error listing every missing name at once.</dd>
+        <dt><code>--clone</code></dt><dd>Fetches any <code>[[clone]]</code> entries declared in the manifest. Omitted by default — plain <code>stack up</code> never touches git — because cloning on every single <code>stack up</code> with no way to opt out or review what's about to happen first was the actual bug this flag exists to fix.</dd>
+        <dt><code>--yes</code></dt><dd>Approves this project's <code>[run]</code>/<code>[service.*]</code> commands without the interactive confirmation prompt. See the trust-on-first-use note below — this is the flag CI/scripted use needs, since a hanging confirmation would otherwise break automation outright.</dd>
+      </dl>
+      <div class="why">
+        <strong>Why the first run asks you to confirm</strong>
+        <p><code>[run].command</code> and <code>[service.*].command</code> are literal program invocations — stack runs them exactly as written, the same way <code>npm install</code> runs whatever's in <code>package.json</code>'s scripts. Nobody reads every line of a <code>stack.toml</code> before running <code>stack up</code>, especially one they didn't write themselves. The first time a project's commands are seen (or the first time they change — say, after a <code>git pull</code>), stack prints them and asks you to confirm before anything executes. Approval is remembered per project in <code>~/.stack/trust.json</code>; unchanged commands never prompt again. A changed command shows a <code>-</code>/<code>+</code> diff and re-prompts rather than silently trusting the new one.</p>
+      </div>
+    </div>
+
+    <div class="cmd">
+      <h3><code>stack down [project] [--all]</code></h3>
+      <p>Stops a project's <code>[run]</code> process and removes its route.</p>
+      <dl class="flags">
+        <dt><code>project</code></dt><dd>Name of the project (or external run) to stop; omit to use the current directory's project. Already name-addressable from anywhere — no directory tracking needed, since running state is keyed by name.</dd>
+        <dt><code>--all</code></dt><dd>Stops every project, every shared service, every external-run registration, and Caddy itself — the true end-of-day shutdown. Without it, shared services keep running for any other project that still references them; only the one named project's <code>[run]</code> process and route are removed.</dd>
+      </dl>
+    </div>
+
+    <div class="cmd">
+      <h3><code>stack restart [project] [--all] [--yes]</code></h3>
+      <p>Stops then starts a project again, resolved by name the same way <code>stack up</code> is — works from anywhere, not just from inside the project.</p>
+      <dl class="flags">
+        <dt><code>project</code></dt><dd>Name of the project to restart; omit to use the current directory's project. Ignored if <code>--all</code> is passed.</dd>
+        <dt><code>--all</code></dt><dd>Restarts everything currently running. Snapshots names from both tracked projects and tracked external runs before tearing anything down — a project whose <code>[run].external = true</code> is only tracked as an external run, not as a project, and would otherwise have its other declared services stopped with nothing bringing them back.</dd>
+        <dt><code>--yes</code></dt><dd>Same trust-on-first-use bypass as <code>stack up --yes</code>, needed here too since restart re-runs <code>up</code> internally.</dd>
+      </dl>
+    </div>
+
+    <div class="cmd">
+      <h3><code>stack describe [name]</code></h3>
+      <p>Prints everything stack knows about a project's resolved environment: the manifest and project directory paths, whether it's currently running, its log file location, resolved binary paths per language (<code>php.exe</code>, and for PHP specifically also <code>php.ini</code> and <code>php-cgi.exe</code>, sitting right next to it), each service's binary/data-dir path or <code>external (BYO)</code>, and resolved tool paths.</p>
+      <dl class="flags"><dt><code>name</code></dt><dd>Name of the project to describe; omit to describe the current directory's project. Resolves the same path-then-name way <code>stack up</code>'s target does.</dd></dl>
+      <p style="font-size:13px;opacity:0.75;">Pure toolchain resolution — nothing is spawned, so it works whether the project is up or down.</p>
+    </div>
+
+    <div class="cmd">
+      <h3><code>stack status</code> <span class="alias">alias: stack ps</span></h3>
+      <p>Lists every running project, service, and external run, plus Caddy's own liveness and route count. Self-healing — drops entries whose process is no longer actually alive before printing anything.</p>
+      <dl class="flags"><dt>No arguments or flags.</dt></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack stats [--no-stream]</code></h3>
+      <p>Continuously-refreshing CPU/memory view, <code>docker stats</code>-style.</p>
+      <dl class="flags"><dt><code>--no-stream</code></dt><dd>Prints one snapshot and exits, instead of refreshing continuously until you interrupt it.</dd></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack logs [name] [-f/--follow] [--tail N]</code></h3>
+      <p>Reads a project's or service's log file directly — works even after it's stopped, since it reads the file, not the running-state list.</p>
+      <dl class="flags">
+        <dt><code>name</code></dt><dd>Name of the project or service whose log to read. Optional in the flag signature, but there's no useful default — omitting it just means stack has nothing to read.</dd>
+        <dt><code>-f</code>, <code>--follow</code></dt><dd>Keep reading as new lines are appended, <code>tail -f</code>-style, instead of printing what's there and exiting.</dd>
+        <dt><code>--tail N</code></dt><dd>Only print the last <code>N</code> lines instead of the whole file.</dd>
+      </dl>
+    </div>
 
     <h2>Manifest editing</h2>
-    <div class="cmd"><h3><code>stack add &lt;kind&gt; &lt;name&gt; [version] [options]</code></h3><p><code>kind</code> is <code>language</code>, <code>service</code>, or <code>tool</code>. Format-preserving — existing comments and key order in <code>stack.toml</code> survive untouched.</p></div>
-    <div class="cmd"><h3><code>stack remove &lt;kind&gt; &lt;name&gt;</code></h3><p>Removes one entry, same format-preserving guarantee.</p></div>
+    <div class="cmd">
+      <h3><code>stack add &lt;kind&gt; &lt;name&gt; [version] [options]</code></h3>
+      <p>Format-preserving — existing comments and key order in <code>stack.toml</code> survive untouched, unlike hand-editing with a script.</p>
+      <dl class="flags">
+        <dt><code>kind</code></dt><dd>Required. <code>language</code>, <code>service</code>, or <code>tool</code>.</dd>
+        <dt><code>name</code></dt><dd>Required. The entry's name, e.g. <code>php</code>, <code>mysql</code>, <code>terraform</code>.</dd>
+        <dt><code>version</code></dt><dd>Required unless <code>--path</code> is set (a BYO install doesn't need a version stack resolves itself).</dd>
+        <dt><code>--schema</code></dt><dd>Service only. Database/schema name; defaults to the project name.</dd>
+        <dt><code>--port</code></dt><dd>Service only. Defaults to the engine's conventional port (3306/5432/27017 for mysql/postgres/mongo); required for any other engine name.</dd>
+        <dt><code>--command</code></dt><dd>Service only. Start command override; required for engines with no built-in default.</dd>
+        <dt><code>--path</code></dt><dd>Any kind. Bring-your-own binary path, bypassing whatever manager would otherwise resolve it.</dd>
+        <dt><code>--manager</code></dt><dd>Language only. Which manager resolves this language (e.g. <code>vfox</code>, <code>uv</code>) — only needed when the name isn't <code>php</code>/<code>node</code> (vfox) or <code>python</code> (uv), which are inferred automatically.</dd>
+        <dt><code>--plugin</code></dt><dd>Language only. vfox plugin name override, for the rare mismatch between a language's name and its vfox plugin name (e.g. Node's plugin is <code>nodejs</code>).</dd>
+        <dt><code>--binary</code></dt><dd>Language only. Binary filename override; defaults to <code>{name}.exe</code>.</dd>
+      </dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack remove &lt;kind&gt; &lt;name&gt;</code></h3>
+      <p>Removes one entry, same format-preserving guarantee as <code>add</code>.</p>
+      <dl class="flags">
+        <dt><code>kind</code></dt><dd>Required. <code>language</code>, <code>service</code>, or <code>tool</code>.</dd>
+        <dt><code>name</code></dt><dd>Required. The entry's name to remove.</dd>
+      </dl>
+    </div>
 
     <h2>Diagnostics &amp; registry</h2>
-    <div class="cmd"><h3><code>stack doctor [--fix]</code></h3><p>Checks vfox/uv/Caddy are present at compatible versions, and that every registered <code>service</code>/<code>tool</code> path still exists on disk. <code>--fix</code> installs vfox/uv/Caddy at stack's pinned versions. Also scans for pre-existing Windows Services (MySQL, MongoDB, PostgreSQL) worth registering as <code>external</code>.</p></div>
-    <div class="cmd"><h3><code>stack register &lt;kind&gt; &lt;name&gt; &lt;version&gt; &lt;path&gt;</code></h3><p><code>kind</code> is <code>service</code>, <code>tool</code>, or <code>language</code> — makes a BYO install reusable by any project, without repeating the path in every <code>stack.toml</code>. <code>stack register service &lt;name&gt; &lt;version&gt; --external --port &lt;port&gt;</code> registers an already-running instance instead of a path.</p></div>
-    <div class="cmd"><h3><code>stack unregister &lt;kind&gt; &lt;name&gt; &lt;version&gt;</code></h3><p>Removes one entry from the global registry — the exact <code>kind</code>/<code>name</code>/<code>version</code> triple <code>stack list</code> reports. Errors if nothing matches. Unlike <code>stack prune</code>, this removes the entry even if a project's <code>stack.toml</code> still references it.</p></div>
-    <div class="cmd"><h3><code>stack list</code></h3><p>Live-merged view of everything installed — vfox, uv, and the registry — queried fresh each time, never cached.</p></div>
-    <div class="cmd"><h3><code>stack prune [--yes] [--purge-data]</code></h3><p>Reports language/service versions installed but no longer referenced by any known project. Dry-run by default; <code>--yes</code> uninstalls orphaned language SDKs and drops orphaned registry pointers only — a service's actual data directory is never touched without the separate, explicit <code>--purge-data</code>.</p></div>
+    <div class="cmd">
+      <h3><code>stack doctor [--fix] [--project]</code></h3>
+      <p>Always checks: vfox/uv/Caddy are present at compatible versions; pre-existing Windows Services (MySQL, MongoDB, PostgreSQL) worth registering as <code>external</code> instead of stack starting a redundant second instance; and, if the current directory has a <code>stack.toml</code>, that its declared <code>[tool.*]</code> entries resolve and any BYO (<code>path</code>-based) <code>[language.*]</code> entries still point at a real file.</p>
+      <dl class="flags">
+        <dt><code>--fix</code></dt><dd>Installs vfox/uv/Caddy at stack's pinned versions if missing, and runs <code>caddy trust</code> so <code>https://*.localhost</code> works with no browser warning. Safe to re-run.</dd>
+        <dt><code>--project</code></dt><dd>Adds the deeper checks: every declared language actually resolves (vfox/uv-managed, not just BYO — or notes it'll install on <code>stack up</code>), every service either has a registered/inline path or is <code>external</code> with something actually listening on its resolved port, <code>[run]</code>'s port isn't already occupied by something else, and every <code>{PLACEHOLDER}</code> in <code>[run].command</code> resolves against the current environment (loading <code>.env</code> first, same as <code>stack up</code> does).</dd>
+      </dl>
+      <div class="why">
+        <strong>Why --project exists</strong>
+        <p>Without it, a broken manifest only shows itself one error at a time, part-way through an actual <code>stack up</code> — a bad port, then fixed, then an unregistered service path, then fixed, then a missing environment variable. <code>--project</code> turns that into one list, up front, before anything is spawned.</p>
+      </div>
+    </div>
+    <div class="cmd">
+      <h3><code>stack register &lt;kind&gt; &lt;name&gt; &lt;version&gt; [path] [--external] [--port]</code></h3>
+      <p>Makes a BYO install reusable by any project, without repeating the path in every <code>stack.toml</code>.</p>
+      <dl class="flags">
+        <dt><code>kind</code></dt><dd>Required. <code>service</code>, <code>tool</code>, or <code>language</code>.</dd>
+        <dt><code>name</code></dt><dd>Required. E.g. <code>redis</code>.</dd>
+        <dt><code>version</code></dt><dd>Required. The version this install corresponds to.</dd>
+        <dt><code>path</code></dt><dd>Path to the existing binary. Omit when using <code>--external</code>.</dd>
+        <dt><code>--external</code></dt><dd>Service only. Adopt an already-running instance instead of registering a path.</dd>
+        <dt><code>--port</code></dt><dd>Required with <code>--external</code>. Port to verify liveness on.</dd>
+      </dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack unregister &lt;kind&gt; &lt;name&gt; &lt;version&gt;</code></h3>
+      <p>Removes one entry from the global registry. Errors if nothing matches. Unlike <code>stack prune</code>, this removes the entry even if a project's <code>stack.toml</code> still references it.</p>
+      <dl class="flags">
+        <dt><code>kind</code></dt><dd>Required. <code>service</code>, <code>tool</code>, or <code>language</code>.</dd>
+        <dt><code>name</code></dt><dd>Required. E.g. <code>redis</code>.</dd>
+        <dt><code>version</code></dt><dd>Required. Must match exactly what <code>stack list</code> reports.</dd>
+      </dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack list</code></h3>
+      <p>Live-merged view of everything installed — vfox, uv, and the registry — queried fresh each time, never cached.</p>
+      <dl class="flags"><dt>No arguments or flags.</dt></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack prune [--yes] [--purge-data]</code></h3>
+      <p>Reports language/service versions installed but no longer referenced by any known project.</p>
+      <dl class="flags">
+        <dt><code>--yes</code></dt><dd>Actually uninstalls orphaned language SDKs and drops orphaned registry pointers. Without it, this is a dry-run report only — nothing is changed.</dd>
+        <dt><code>--purge-data</code></dt><dd>Requires <code>--yes</code>. Also deletes orphaned services' data directories. Separate from <code>--yes</code> deliberately — uninstalling an SDK is reversible (reinstall it), deleting a database's data directory isn't.</dd>
+      </dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack clean</code></h3>
+      <p>Removes cached <code>composer.phar</code> downloads (<code>~/.stack/tools/composer</code>). v1 scope is intentionally narrow — just this one cache — since it's the only thing stack downloads outside of vfox/uv's own managed stores. Self-healing: the next project that needs Composer just re-downloads it.</p>
+      <dl class="flags"><dt>No arguments or flags.</dt></dl>
+    </div>
 
     <h2>Shell integration</h2>
-    <div class="cmd"><h3><code>stack setup [--shell]</code></h3><p>One-time bootstrap: wires the shell hook into your profile and runs <code>doctor --fix</code>. Idempotent — safe to run again.</p></div>
-    <div class="cmd"><h3><code>stack hook &lt;shell&gt;</code></h3><p>Prints the bootstrap script your shell profile evaluates once at startup. You won't normally call this directly — <code>stack setup</code> wires it for you.</p></div>
-    <div class="cmd"><h3><code>stack activate &lt;shell&gt;</code></h3><p>Called by the hook on every prompt — resolves the current directory's <code>stack.toml</code> (if any) and prints the <code>PATH</code> changes for that shell to apply. Silent, no-op output when no manifest is found.</p></div>
-    <div class="cmd"><h3><code>stack load-env [path]</code></h3><p>Loads a <code>.env</code>-style file for the current shell session only (defaults to <code>.env</code> in the current directory). Confirms which variable names were loaded — never the values.</p></div>
+    <div class="cmd">
+      <h3><code>stack setup [--shell]</code></h3>
+      <p>One-time bootstrap per machine: wires the shell hook into your profile and runs the equivalent of <code>doctor --fix</code>. Idempotent — safe to run again.</p>
+      <dl class="flags"><dt><code>--shell</code></dt><dd>Which shell's profile to wire (<code>pwsh</code>, <code>powershell</code>, or <code>cmd</code>). Auto-detected from the parent process if omitted, by walking up to 10 ancestor processes past wrapper processes like <code>conhost.exe</code>/Windows Terminal to find the actual shell that launched <code>stack setup</code> — the same technique <code>shellingham</code> (the reference implementation for this exact problem) uses, since there's no OS API that answers "what shell spawned me" directly.</dd></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack hook &lt;shell&gt;</code></h3>
+      <p>Prints the activation script your shell profile evaluates once at startup. You won't normally call this directly — <code>stack setup</code> wires it for you.</p>
+      <dl class="flags"><dt><code>shell</code></dt><dd>Required. Which shell to print the hook script for, e.g. <code>pwsh</code>.</dd></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack activate &lt;shell&gt;</code></h3>
+      <p>Called by the hook on every prompt — resolves the current directory's <code>stack.toml</code> (if any) and prints the <code>PATH</code> changes for that shell to apply. Silent, no-op output when no manifest is found.</p>
+      <dl class="flags"><dt><code>shell</code></dt><dd>Required. Which shell is invoking this, e.g. <code>pwsh</code>.</dd></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack load-env [path]</code></h3>
+      <p>Loads a <code>.env</code>-style file into the current shell session. Confirms which variable names were loaded, never the values. <code>stack up</code>/<code>stack doctor --project</code> now do this automatically for a project's own <code>.env</code> — this command is for loading one manually, into your interactive shell, for anything you're running by hand.</p>
+      <dl class="flags"><dt><code>path</code></dt><dd>Path to the <code>.env</code> file; defaults to <code>.env</code> in the current directory.</dd></dl>
+    </div>
 
+    <nav class="docs-pager">
+      <a href="manifest.html"><span class="pager-dir">Previous</span><span class="pager-title">← Manifest Reference</span></a>
+      <span></span>
+    </nav>
   </main>
 </div>
 <script src="site.js"></script>

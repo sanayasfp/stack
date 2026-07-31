@@ -18,9 +18,12 @@
   const toggle = document.querySelector('[data-docs-nav-toggle]');
   const side = document.querySelector('.docs-side');
   if (!toggle || !side) return;
+  const closedLabel = toggle.textContent;
   toggle.addEventListener('click', () => {
     const isOpen = side.classList.toggle('is-open');
     toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    toggle.textContent = isOpen ? 'Close' : closedLabel;
+    document.body.style.overflow = isOpen ? 'hidden' : '';
   });
 })();
 

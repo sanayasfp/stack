@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Why stack? — stack docs</title>
+<meta name="description" content="Why stack runs your project's languages, databases, and dev server as plain processes instead of containers or a shared global install." />
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="styles.css" />
+<style>
+.wrap { max-width: 1200px; margin: 0 auto; padding: 0 clamp(20px, 5vw, 72px); }
+.nav { padding-inline: max(clamp(20px, 5vw, 72px), calc((100% - 1200px) / 2 + clamp(20px, 5vw, 72px))); }
+.nav a[aria-current='page'] { color: var(--color-accent-700); }
+.docs-main p, .docs-main li { font-size: 15px; }
+.docs-main .lead { font-size: 17px; opacity: 0.85; max-width: 60ch; }
+.why-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); margin: var(--space-4) 0 var(--space-6); }
+@media (max-width: 620px) { .why-grid { grid-template-columns: 1fr; } }
+.why-card { border: 1px solid var(--color-divider); padding: var(--space-4); }
+.why-card h3 { margin-top: 0; font-size: 17px; }
+.why-card p { font-size: 13.5px; opacity: 0.85; margin: 0; }
+</style>
+</head>
+<body>
+<nav class="nav site-nav">
+  <a href="index.html" class="nav-lockup"><img class="nav-mark" src="assets/logo.svg" alt="" /><span class="nav-brand">stack</span></a>
+  <div class="nav-links">
+    <a href="why.html" aria-current="page">Docs</a>
+    <a href="changelog.html">Changelog</a>
+    <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
+  </div>
+  <button type="button" class="btn btn-secondary docs-nav-toggle" data-docs-nav-toggle aria-expanded="false" aria-label="Toggle docs menu">Menu</button>
+  <button type="button" class="btn btn-secondary btn-icon theme-toggle blueprint" id="theme-toggle" aria-label="Switch between light and dark">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+    <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  </button>
+</nav>
+<div class="wrap docs-layout">
+  <aside class="docs-side">
+    <div class="side-group">
+      <h6>Guide</h6>
+      <a href="why.html" aria-current="page">Why stack?</a>
+      <a href="getting-started.html">Getting Started</a>
+      <a href="custom-domains.html">Custom Domains</a>
+    </div>
+    <div class="side-group">
+      <h6>Reference</h6>
+      <a href="manifest.html">Manifest (stack.toml)</a>
+      <a href="cli.html">CLI Commands</a>
+    </div>
+    <div class="side-group">
+      <h6>More</h6>
+      <a href="https://github.com/sanayasfp/stack/tree/main/examples" target="_blank" rel="noopener">Examples</a>
+      <a href="changelog.html">Changelog</a>
+      <a href="https://github.com/sanayasfp/stack" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </aside>
+
+  <main class="docs-main">
+    <span class="kicker" style="display:block;font-family:var(--font-heading);font-size:12px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;color:var(--color-accent-700);margin-bottom:8px;">Guide</span>
+    <h1>Why stack?</h1>
+    <p class="lead">stack runs your project's languages, databases, and dev server as plain processes on your own machine. No Docker, no virtual machine, nothing running when you're not working.</p>
+
+    <h2 id="problem">The problem</h2>
+    <p>Local dev setup on Windows has three well-worn paths, and each one costs you something:</p>
+    <ul>
+      <li><strong>XAMPP, WAMP, a hand-installed PHP/Node/Python</strong> — one global version of everything. Two projects that need different PHP versions can't both work at once without manual juggling.</li>
+      <li><strong>Docker Desktop</strong> — solves the version problem, but Docker Desktop on Windows runs a full Linux VM underneath. That's real RAM and CPU spent before your app has served a single request, and container rebuilds are slower than restarting a plain process.</li>
+      <li><strong>Nothing at all</strong> — just running <code>php artisan serve</code> or <code>npm run dev</code> by hand, every time, in every terminal tab, remembering which port went to which project.</li>
+    </ul>
+
+    <h2 id="approach">What stack does instead</h2>
+    <p>Every project gets a <code>stack.toml</code> — one file, checked into the repo, that says which language versions and services it needs. Run <code>stack setup</code> once per machine; from then on, <code>cd</code> into any project and its exact toolchain is already active, no container, no manual switching.</p>
+
+    <div class="why-grid">
+      <div class="why-card">
+        <h3>Pinned per project</h3>
+        <p>Two projects, two different PHP versions, running at the same time, with zero conflict — each one only sees its own <code>stack.toml</code>.</p>
+      </div>
+      <div class="why-card">
+        <h3>A real domain, automatically</h3>
+        <p><code>myapp.localhost</code> resolves the moment you run <code>stack up</code> — no hosts file, no admin rights, via Caddy.</p>
+      </div>
+      <div class="why-card">
+        <h3>HTTPS with no warning</h3>
+        <p>The same domain works over <code>https://</code> too. stack trusts a local CA once, the same way mkcert does.</p>
+      </div>
+      <div class="why-card">
+        <h3>Actually off when it's off</h3>
+        <p><code>stack down --all</code> stops every process it started. No idle VM burning battery in the background.</p>
+      </div>
+    </div>
+
+    <h2 id="tradeoffs">What this isn't</h2>
+    <p>Honest tradeoffs, not a sales pitch:</p>
+    <ul>
+      <li><strong>Windows only, for now.</strong> macOS and Linux support is planned, not shipped.</li>
+      <li><strong>Not a production deployment tool.</strong> stack manages your local machine. What you ship to production is a separate concern, same as it would be with Docker.</li>
+      <li><strong>Not a Docker replacement for every case.</strong> If your team already has a working Docker Compose setup and it's fast enough for you, there's no urgent reason to switch. stack is for when that overhead is the actual bottleneck in your day.</li>
+    </ul>
+
+    <h2 id="next">Next</h2>
+    <p><a href="getting-started.html">Getting Started</a> — install stack and bring up your first project in three commands.</p>
+
+    <nav class="docs-pager">
+      <span></span>
+      <a href="getting-started.html"><span class="pager-dir">Next</span><span class="pager-title">Getting Started →</span></a>
+    </nav>
+  </main>
+</div>
+<script src="site.js"></script>
+</body>
+</html>
