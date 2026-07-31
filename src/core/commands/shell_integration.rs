@@ -5,7 +5,7 @@ use crate::core::commands::shared::resolve_tool;
 use crate::core::constants::STACK_ACCENT_RGB;
 use crate::core::manifest::{self, Manifest};
 use crate::core::registry::Registry;
-use crate::core::{placeholder, toolchain};
+use crate::core::{placeholder, style, toolchain};
 use crate::platform;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -66,7 +66,7 @@ fn scan_windows_services() {
 /// path registered, placeholders resolvable) without starting anything.
 fn doctor_service(engine: &str, svc: &crate::core::manifest::Service) -> bool {
     if let Err(e) = svc.validate(engine) {
-        println!("  service.{engine}: INVALID ({e:#})");
+        println!("  service.{engine}: {}", style::err(&format!("INVALID ({e:#})")));
         return false;
     }
 
@@ -78,31 +78,31 @@ fn doctor_service(engine: &str, svc: &crate::core::manifest::Service) -> bool {
         let port = svc.resolve_port(engine, false).ok().flatten().or(registry_external_port).or_else(|| manifest::conventional_port(engine));
         match port {
             Some(port) if port_in_use(port) => {
-                println!("  service.{engine}: OK (external, listening on {port})");
+                println!("  service.{engine}: {}", style::ok(&format!("OK (external, listening on {port})")));
                 true
             }
             Some(port) => {
-                println!("  service.{engine}: nothing listening on {port} (marked external)");
+                println!("  service.{engine}: {}", style::err(&format!("nothing listening on {port} (marked external)")));
                 false
             }
             None => {
-                println!("  service.{engine}: external, but no port resolvable — set [service.{engine}].port");
+                println!("  service.{engine}: {}", style::err("external, but no port resolvable — set [service.{engine}].port"));
                 false
             }
         }
     } else {
         let has_path = svc.path.is_some() || Registry::load().lookup("service", engine, &svc.version).and_then(|e| e.path.clone()).is_some();
         let path_ok = if has_path {
-            println!("  service.{engine}: OK (managed)");
+            println!("  service.{engine}: {}", style::ok("OK (managed)"));
             true
         } else {
-            println!("  service.{engine}: no path registered — run `stack register service {engine} {} <path>`", svc.version);
+            println!("  service.{engine}: {}", style::err(&format!("no path registered — run `stack register service {engine} {} <path>`", svc.version)));
             false
         };
         let port_ok = match svc.resolve_port(engine, false) {
             Ok(_) => true,
             Err(e) => {
-                println!("  service.{engine}: port placeholder unresolved ({e:#})");
+                println!("  service.{engine}: {}", style::err(&format!("port placeholder unresolved ({e:#})")));
                 false
             }
         };
@@ -113,35 +113,35 @@ fn doctor_service(engine: &str, svc: &crate::core::manifest::Service) -> bool {
 /// Validates `[run]` against live reality the same way `doctor_service` does for services.
 fn doctor_run(run: &crate::core::manifest::Run, has_php: bool) -> bool {
     if let Err(e) = run.validate(has_php) {
-        println!("  [run]: INVALID ({e:#})");
+        println!("  [run]: {}", style::err(&format!("INVALID ({e:#})")));
         return false;
     }
 
     if run.external {
         match run.resolve_port(false) {
             Ok(Some(port)) if port_in_use(port) => {
-                println!("  [run]: OK (external, listening on {port})");
+                println!("  [run]: {}", style::ok(&format!("OK (external, listening on {port})")));
                 true
             }
             Ok(Some(port)) => {
-                println!("  [run]: nothing listening on {port} (marked external)");
+                println!("  [run]: {}", style::err(&format!("nothing listening on {port} (marked external)")));
                 false
             }
             Ok(None) => true,
             Err(e) => {
-                println!("  [run]: port unresolved ({e:#})");
+                println!("  [run]: {}", style::err(&format!("port unresolved ({e:#})")));
                 false
             }
         }
     } else {
         let port_ok = match run.resolve_port(false) {
             Ok(Some(port)) if port_in_use(port) => {
-                println!("  [run]: port {port} already in use");
+                println!("  [run]: {}", style::err(&format!("port {port} already in use")));
                 false
             }
             Ok(_) => true,
             Err(e) => {
-                println!("  [run]: port unresolved ({e:#})");
+                println!("  [run]: {}", style::err(&format!("port unresolved ({e:#})")));
                 false
             }
         };
@@ -152,7 +152,7 @@ fn doctor_run(run: &crate::core::manifest::Run, has_php: bool) -> bool {
                 match placeholder::resolve(command, &reserved, false) {
                     Ok(_) => true,
                     Err(missing) => {
-                        println!("  [run]: command has unresolved placeholder(s): {}", missing.join(", "));
+                        println!("  [run]: {}", style::err(&format!("command has unresolved placeholder(s): {}", missing.join(", "))));
                         false
                     }
                 }
@@ -173,8 +173,8 @@ fn doctor_project() -> Result<()> {
 
     for (name, entry) in &manifest.language {
         match toolchain::lookup(name, entry) {
-            Some(bin) => println!("  language.{name}: OK ({})", bin.display()),
-            None => println!("  language.{name}: not installed yet (will be installed on `stack up`)"),
+            Some(bin) => println!("  language.{name}: {} ({})", style::ok("OK"), bin.display()),
+            None => println!("  language.{name}: {}", style::warn("not installed yet (will be installed on `stack up`)")),
         }
     }
 
@@ -200,23 +200,23 @@ pub fn doctor(fix: bool, project: bool) -> Result<()> {
         };
         match check {
             Ok(version) => {
-                println!("  {tool}: OK ({version})");
+                println!("  {tool}: {} ({version})", style::ok("OK"));
                 if let Some(pinned) = crate::core::pinned::pinned_version(tool)
                     && !version.contains(pinned)
                 {
-                    println!("    warning: stack was tested against {tool} {pinned}; installed version may behave differently");
+                    println!("    {}", style::warn(&format!("warning: stack was tested against {tool} {pinned}; installed version may behave differently")));
                 }
             }
             Err(e) => {
-                println!("  {tool}: MISSING ({e:#})");
+                println!("  {tool}: {} ({e:#})", style::err("MISSING"));
                 all_ok = false;
                 if fix {
                     let pinned =
                         crate::core::pinned::pinned_version(tool).ok_or_else(|| anyhow!("no pinned version known for '{tool}'"))?;
                     println!("  installing {tool}@{pinned}...");
                     match platform::install_pinned(tool, pinned) {
-                        Ok(()) => println!("  {tool}: installed"),
-                        Err(e) => println!("  {tool}: install failed: {e:#}"),
+                        Ok(()) => println!("  {tool}: {}", style::ok("installed")),
+                        Err(e) => println!("  {tool}: {}", style::err(&format!("install failed: {e:#}"))),
                     }
                 }
             }
@@ -231,9 +231,9 @@ pub fn doctor(fix: bool, project: bool) -> Result<()> {
             println!("tools declared in {}:", path.display());
             for (name, tool) in &manifest.tool {
                 match resolve_tool(name, tool, fix) {
-                    Ok(bin) => println!("  tool.{name}: OK ({})", bin.display()),
+                    Ok(bin) => println!("  tool.{name}: {} ({})", style::ok("OK"), bin.display()),
                     Err(e) => {
-                        println!("  tool.{name}: MISSING ({e:#})");
+                        println!("  tool.{name}: {} ({e:#})", style::err("MISSING"));
                         all_ok = false;
                     }
                 }
@@ -245,9 +245,9 @@ pub fn doctor(fix: bool, project: bool) -> Result<()> {
             for (name, entry) in byo_languages {
                 let byo_path = entry.path().expect("filtered to entries with a path");
                 if Path::new(byo_path).is_file() {
-                    println!("  language.{name}: OK ({byo_path})");
+                    println!("  language.{name}: {} ({byo_path})", style::ok("OK"));
                 } else {
-                    println!("  language.{name}: MISSING ({byo_path})");
+                    println!("  language.{name}: {} ({byo_path})", style::err("MISSING"));
                     all_ok = false;
                 }
             }

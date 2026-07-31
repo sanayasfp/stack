@@ -6,7 +6,7 @@ use crate::core::process::{self, Runnable};
 use crate::core::projects::{ProjectRecord, ProjectsFile};
 use crate::core::registry::Registry;
 use crate::core::state::State;
-use crate::core::{placeholder, toolchain, trust};
+use crate::core::{placeholder, style, toolchain, trust};
 use crate::platform;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -24,9 +24,9 @@ fn print_version(binary: &Path, label: &str) {
                 .next()
                 .unwrap_or("")
                 .to_string();
-            println!("  {label}: {} -> {first_line}", binary.display());
+            println!("  {}: {} -> {first_line}", style::ok(label), binary.display());
         }
-        Err(e) => eprintln!("  {label}: failed to run {}: {e}", binary.display()),
+        Err(e) => eprintln!("  {}: failed to run {}: {e}", style::err(label), binary.display()),
     }
 }
 
@@ -68,10 +68,10 @@ fn resolve_up_target(target: &str) -> Result<(PathBuf, Manifest)> {
 fn route_project(state: &mut State, name: &str, domain: &str, port: u16) {
     match caddy::ensure_running(state) {
         Ok(()) => match caddy::push_route(name, domain, port) {
-            Ok(()) => println!("  routed: http://{domain} -> 127.0.0.1:{port}"),
-            Err(e) => eprintln!("  warning: failed to push route: {e:#}"),
+            Ok(()) => println!("  {}: http://{domain} -> 127.0.0.1:{port}", style::ok("routed")),
+            Err(e) => eprintln!("  {}: failed to push route: {e:#}", style::warn("warning")),
         },
-        Err(e) => eprintln!("  warning: could not start/reach caddy for routing: {e:#}"),
+        Err(e) => eprintln!("  {}: could not start/reach caddy for routing: {e:#}", style::warn("warning")),
     }
 }
 
@@ -142,7 +142,7 @@ fn handle_external_service(engine: &str, svc: &Service, port: u16) -> Result<()>
     if !port_in_use(port) {
         bail!("[service.{engine}] is marked external but nothing is listening on port {port}");
     }
-    println!("  service.{engine}: external — connected on port {port}");
+    println!("  {}: external — connected on port {port}", style::ok(&format!("service.{engine}")));
     Ok(())
 }
 
@@ -222,9 +222,9 @@ fn start_service_if_needed(state: &mut State, engine: &str, svc: &Service, allow
 
 fn handle_external_run(state: &mut State, manifest: &Manifest, port: u16) {
     if port_in_use(port) {
-        println!("  run: external — something is already listening on port {port}");
+        println!("  {}: external — something is already listening on port {port}", style::ok("run"));
     } else {
-        println!("  run: external — nothing listening on port {port} yet; start your dev server whenever you're ready");
+        println!("  {}: external — nothing listening on port {port} yet; start your dev server whenever you're ready", style::warn("run"));
     }
     process::record_external_run(state, &manifest.project.name, port, manifest.project.domain.clone());
     if let Some(domain) = &manifest.project.domain {
@@ -366,23 +366,26 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
                 print_version(&bin, name);
                 resolved_binaries.push(bin);
             }
-            Err(e) => eprintln!("  {name}: {e:#}"),
+            Err(e) => eprintln!("  {}: {e:#}", style::err(name)),
         }
     }
 
     for (name, tool) in &manifest.tool {
         match resolve_tool(name, tool, true) {
             Ok(bin) => {
-                println!("  tool.{name}: {}", bin.display());
+                println!("  {}: {}", style::ok(&format!("tool.{name}")), bin.display());
                 resolved_binaries.push(bin);
             }
-            Err(e) => eprintln!("  tool.{name}: {e:#}"),
+            Err(e) => eprintln!("  {}: {e:#}", style::err(&format!("tool.{name}"))),
         }
     }
 
     let mut state = State::load();
     let mut used_services: Vec<String> = Vec::new();
 
+    if !manifest.service.is_empty() {
+        println!();
+    }
     for (engine, svc) in &manifest.service {
         let registry_external_port: Option<u16> = if svc.path.is_none() && !svc.external {
             Registry::load().lookup("service", engine, &svc.version).filter(|e| e.external).and_then(|e| e.port)
@@ -395,7 +398,7 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
             let declared_port = match svc.port.as_ref().map(|p| p.resolve(allow_prompt)).transpose() {
                 Ok(p) => p,
                 Err(e) => {
-                    eprintln!("  service.{engine}: {e:#}");
+                    eprintln!("  {}: {e:#}", style::err(&format!("service.{engine}")));
                     continue;
                 }
             };
@@ -403,43 +406,46 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
                 Some(p) => p,
                 None => {
                     eprintln!(
-                        "  service.{engine}: external, but no port available — set [service.{engine}].port, or register one via `stack register service {engine} {} --external --port <port>`",
+                        "  {}: external, but no port available — set [service.{engine}].port, or register one via `stack register service {engine} {} --external --port <port>`",
+                        style::err(&format!("service.{engine}")),
                         svc.version
                     );
                     continue;
                 }
             };
             if let Err(e) = handle_external_service(engine, svc, port) {
-                eprintln!("  service.{engine}: {e:#}");
+                eprintln!("  {}: {e:#}", style::err(&format!("service.{engine}")));
             }
             continue;
         }
         match start_service_if_needed(&mut state, engine, svc, allow_prompt) {
             Ok((pid, port, true)) => {
-                println!("  service.{engine}: started (pid {pid}, port {port})");
+                println!("  {}: started (pid {pid}, port {port})", style::ok(&format!("service.{engine}")));
                 println!(
-                    "    schema '{}' — automatic creation not yet implemented; create it manually if needed",
-                    svc.resolve_schema(&manifest.project.name)
+                    "    {}",
+                    style::warn(&format!("schema '{}' — automatic creation not yet implemented; create it manually if needed", svc.resolve_schema(&manifest.project.name)))
                 );
                 used_services.push(format!("{engine}@{}", svc.version));
             }
             Ok((pid, port, false)) => {
-                println!("  service.{engine}: already running, shared with other projects (pid {pid}, port {port})");
+                println!("  {}: already running, shared with other projects (pid {pid}, port {port})", style::ok(&format!("service.{engine}")));
                 used_services.push(format!("{engine}@{}", svc.version));
             }
-            Err(e) => eprintln!("  service.{engine}: {e:#}"),
+            Err(e) => eprintln!("  {}: {e:#}", style::err(&format!("service.{engine}"))),
         }
     }
     save_state(&state);
     record_project_versions(&manifest, &project_dir);
 
     let Some(run) = &manifest.run else {
+        println!();
         println!("(no [run] — nothing spawned or routed)");
         return Ok(());
     };
     let has_php = manifest.language.contains_key("php");
     run.validate(has_php)?;
 
+    println!();
     if run.external {
         let port = run.resolve_port(allow_prompt)?.expect("run.validate() guarantees port is set when external");
         handle_external_run(&mut state, &manifest, port);
@@ -506,7 +512,7 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
 
     let pid = process::spawn(&runnable)?;
     process::record_project(&mut state, &manifest.project.name, pid, Some(port), used_services);
-    println!("  run: {resolved_command}  (pid {pid}, port {port})");
+    println!("  {}: {resolved_command}  (pid {pid}, port {port})", style::ok("run"));
     println!("  log: {}", process::log_path(&manifest.project.name).display());
     if let Some(domain) = &manifest.project.domain {
         match &php_docroot {
@@ -532,10 +538,10 @@ fn detect_php_docroot(run_cwd: &Path) -> String {
 fn route_project_fastcgi(state: &mut State, name: &str, domain: &str, port: u16, docroot: &str) {
     match caddy::ensure_running(state) {
         Ok(()) => match caddy::push_fastcgi_route(name, domain, port, docroot) {
-            Ok(()) => println!("  routed: http://{domain} -> 127.0.0.1:{port} (fastcgi, root {docroot})"),
-            Err(e) => eprintln!("  warning: failed to push route: {e:#}"),
+            Ok(()) => println!("  {}: http://{domain} -> 127.0.0.1:{port} (fastcgi, root {docroot})", style::ok("routed")),
+            Err(e) => eprintln!("  {}: failed to push route: {e:#}", style::warn("warning")),
         },
-        Err(e) => eprintln!("  warning: could not start/reach caddy for routing: {e:#}"),
+        Err(e) => eprintln!("  {}: could not start/reach caddy for routing: {e:#}", style::warn("warning")),
     }
 }
 

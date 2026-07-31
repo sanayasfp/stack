@@ -10,5 +10,6 @@ pub mod projects;
 pub mod registry;
 pub mod shell;
 pub mod state;
+pub mod style;
 pub mod toolchain;
 pub mod trust;
