@@ -91,6 +91,8 @@ enum Command {
         #[arg(long)]
         purge_data: bool,
     },
+    /// Remove cached composer.phar downloads (~/.stack/tools/composer)
+    Clean,
     /// Load a project's environment variables into the current shell
     LoadEnv {
         /// Path to the .env file (defaults to ".env" in the current directory)
@@ -196,6 +198,7 @@ pub fn run() {
             Ok(())
         }
         Command::Prune { yes, purge_data } => registry_commands::prune(yes, purge_data),
+        Command::Clean => registry_commands::clean(),
         Command::LoadEnv { path } => shell_integration::load_env(path),
         Command::Up { target, prompt, clone, yes } => lifecycle::up(&target, prompt, clone, yes),
         Command::Down { project, all } => lifecycle::down(project, all),

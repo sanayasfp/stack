@@ -235,3 +235,29 @@ pub fn prune(yes: bool, purge_data: bool) -> Result<()> {
 
     Ok(())
 }
+
+/// v1 scope: only the composer.phar cache (`~/.stack/tools/composer/<version>/composer.phar`).
+pub fn clean() -> Result<()> {
+    let composer_dir = dirs::home_dir().ok_or_else(|| anyhow!("could not resolve home directory"))?.join(".stack").join("tools").join("composer");
+
+    if !composer_dir.is_dir() {
+        println!("nothing to clean (no composer.phar cache found)");
+        return Ok(());
+    }
+
+    let versions: Vec<String> = std::fs::read_dir(&composer_dir)
+        .with_context(|| format!("failed to read {}", composer_dir.display()))?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().is_dir())
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+
+    if versions.is_empty() {
+        println!("nothing to clean (composer.phar cache is empty)");
+        return Ok(());
+    }
+
+    std::fs::remove_dir_all(&composer_dir).with_context(|| format!("failed to remove {}", composer_dir.display()))?;
+    println!("removed cached composer.phar: {}", versions.join(", "));
+    Ok(())
+}
