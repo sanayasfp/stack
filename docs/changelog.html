@@ -43,6 +43,22 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.2.0 — 2026-08-03</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.2.0" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>. The largest feature surface shipped so far — first minor version bump.</p>
+      <h2>Added</h2>
+      <ul>
+        <li><code>stack profile</code> — named, persisted sets of language/tool version pins usable from <em>any</em> directory, not just inside a stack-managed project. The wizard walks through the same language-picking flow as <code>stack new</code>, then lets you activate it in the current shell, save it under a name, or both.</li>
+        <li><code>stack profile &lt;name&gt;</code> activates a saved profile in the current shell; <code>stack profile &lt;name&gt; --exec "&lt;command&gt;"</code> resolves its pins (installing anything missing) and runs a one-off command with them on <code>PATH</code>, then exits — nothing persists.</li>
+        <li><code>stack profile list</code>/<code>describe &lt;name&gt;</code>/<code>edit &lt;name&gt;</code>/<code>rm &lt;name&gt;</code> — manage saved profiles.</li>
+        <li><code>stack deactivate</code> — clears an explicitly-activated profile. A project's own <code>cd</code>-based activation is unaffected.</li>
+        <li><code>stack which [name]</code> — shows exactly what stack would resolve a language/tool to right now, and why (current project, active profile, or the reserved <code>default</code>-named profile as a fallback).</li>
+        <li><code>stack exec --with php@8.3.1,node@20 -- &lt;command&gt;</code> — ephemeral ad hoc version pins with no named profile at all.</li>
+        <li><code>stack setup --default-profile &lt;name&gt;</code> — ambiently auto-activates a profile in every new terminal.</li>
+        <li><code>stack prune</code> now also scans saved profiles, so a profile's pinned languages are never mistaken for orphaned installs.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.1.26 — 2026-07-31</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.1.26" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>. Bundles what would otherwise have been 11 separate patch releases into one.</p>
       <h2>Added</h2>
