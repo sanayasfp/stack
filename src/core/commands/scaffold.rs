@@ -54,11 +54,11 @@ fn build_manifest_toml(name: &str, domain: &str, languages: &[(String, String)],
     toml
 }
 
-const KNOWN_LANGUAGES: &[&str] = &["php", "node", "python"];
+pub(crate) const KNOWN_LANGUAGES: &[&str] = &["php", "node", "python"];
 const KNOWN_SERVICES: &[&str] = &["mysql", "postgres", "mongo", "redis", "meilisearch"];
 
 /// Checkbox multi-select: space to toggle, enter to confirm.
-fn select_checkboxes(prompt: &str, known: &[&str], preselected: &[String]) -> Result<Vec<String>> {
+pub(crate) fn select_checkboxes(prompt: &str, known: &[&str], preselected: &[String]) -> Result<Vec<String>> {
     let items: Vec<String> = known.iter().map(|s| s.to_string()).collect();
     let defaults: Vec<bool> = items.iter().map(|item| preselected.contains(item)).collect();
     let chosen = dialoguer::MultiSelect::new().with_prompt(prompt).items(&items).defaults(&defaults).interact().context("failed to read selection")?;
@@ -66,7 +66,7 @@ fn select_checkboxes(prompt: &str, known: &[&str], preselected: &[String]) -> Re
 }
 
 /// Loop for anything not in the known checkbox list; empty name ends the loop.
-fn collect_other_names(kind: &str) -> Result<Vec<String>> {
+pub(crate) fn collect_other_names(kind: &str) -> Result<Vec<String>> {
     let mut names = Vec::new();
     loop {
         let name: String = dialoguer::Input::new()
@@ -82,7 +82,7 @@ fn collect_other_names(kind: &str) -> Result<Vec<String>> {
     Ok(names)
 }
 
-fn ask_version(kind: &str, name: &str, default: Option<&str>) -> Result<String> {
+pub(crate) fn ask_version(kind: &str, name: &str, default: Option<&str>) -> Result<String> {
     let mut input = dialoguer::Input::<String>::new().with_prompt(format!("  {name} version"));
     if let Some(d) = default {
         input = input.default(d.to_string());

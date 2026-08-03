@@ -1,4 +1,4 @@
-use crate::core::commands::{lifecycle, registry_commands, scaffold, shell_integration};
+use crate::core::commands::{lifecycle, profile, registry_commands, scaffold, shell_integration};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -181,7 +181,46 @@ enum Command {
         /// Shell to install the hook for (auto-detected from the parent process if omitted)
         #[arg(long)]
         shell: Option<String>,
+        /// Auto-activate this saved profile in every new terminal ("none" to clear)
+        #[arg(long)]
+        default_profile: Option<String>,
     },
+    /// Manage saved sets of language/tool version pins, usable outside any project directory
+    Profile {
+        #[command(subcommand)]
+        action: Option<ProfileAction>,
+    },
+    /// Clear an explicitly-activated profile (a project's own `cd`-based activation is unaffected)
+    Deactivate,
+    /// Show what stack would resolve a language/tool to right now, and why
+    Which {
+        /// Language or tool name to resolve; omit to summarize the whole active context
+        name: Option<String>,
+    },
+    /// Resolve ad hoc language/tool pins and run a one-off command with them on PATH
+    Exec {
+        /// Comma-separated name@version pins, e.g. "php@8.3.1,node@20"
+        #[arg(long)]
+        with: String,
+        /// The command to run, e.g. `-- npm run build`
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ProfileAction {
+    /// List all saved profiles
+    List,
+    /// Show a saved profile's pinned versions and resolved status
+    Describe { name: String },
+    /// Open a saved profile in $EDITOR/$VISUAL (falls back to notepad.exe / vi)
+    Edit { name: String },
+    /// Delete a saved profile
+    Rm { name: String },
+    /// `<name>` activates it; `<name> --exec "<command>"` runs a one-off command with its pins
+    #[command(external_subcommand)]
+    Activate(Vec<String>),
 }
 
 pub fn run() {
@@ -222,11 +261,24 @@ pub fn run() {
             shell_integration::activate(&shell);
             Ok(())
         }
-        Command::Setup { shell } => {
+        Command::Setup { shell, default_profile } => {
             let shell = shell.unwrap_or_else(crate::core::shell::detect_shell);
-            shell_integration::setup(&shell);
+            shell_integration::setup(&shell, default_profile.as_deref())
+        }
+        Command::Profile { action } => match action {
+            None => profile::wizard(),
+            Some(ProfileAction::List) => profile::list(),
+            Some(ProfileAction::Describe { name }) => profile::describe(&name),
+            Some(ProfileAction::Edit { name }) => profile::edit(&name),
+            Some(ProfileAction::Rm { name }) => profile::rm(&name),
+            Some(ProfileAction::Activate(raw_args)) => profile::activate_or_exec(&raw_args),
+        },
+        Command::Deactivate => {
+            profile::deactivate();
             Ok(())
         }
+        Command::Which { name } => profile::which(name),
+        Command::Exec { with, command } => profile::exec_with(&with, &command),
     };
 
     if let Err(e) = result {

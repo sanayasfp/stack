@@ -158,6 +158,16 @@ pub fn prune(yes: bool, purge_data: bool) -> Result<()> {
         let _ = projects.save();
     }
 
+    for name in super::profile::list_names().unwrap_or_default() {
+        if let Ok(manifest) = super::profile::load_profile(&name) {
+            for (lang_name, entry) in &manifest.language {
+                if let Some(v) = entry.version() {
+                    referenced_languages.insert((lang_name.clone(), v.to_string()));
+                }
+            }
+        }
+    }
+
     let mut orphan_vfox: Vec<(String, String)> = Vec::new();
     for (plugin, version) in installed_vfox_languages() {
         if !referenced_languages.contains(&(plugin.clone(), version.clone())) {
