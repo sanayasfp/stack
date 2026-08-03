@@ -107,7 +107,7 @@ fn patch_php_ini_content(content: &str, opcache_dll_present: bool) -> String {
             .map(|ext| format!("extension={ext}"))
             .or_else(|| (opcache_dll_present && line == ";zend_extension=opcache").then(|| "zend_extension=opcache".to_string()))
             .or_else(|| (line == ";opcache.enable=1").then(|| "opcache.enable=1".to_string()))
-            .or_else(|| (line == ";opcache.enable_cli=0").then(|| "opcache.enable_cli=1".to_string()))
+            // .or_else(|| (line == ";opcache.enable_cli=0").then(|| "opcache.enable_cli=1".to_string()))
             .or_else(|| line.starts_with(";date.timezone").then(|| "date.timezone = UTC".to_string()))
             .or_else(|| line.starts_with("memory_limit = ").then(|| "memory_limit = 512M".to_string()))
             .or_else(|| line.starts_with("upload_max_filesize = ").then(|| "upload_max_filesize = 64M".to_string()))
@@ -361,7 +361,7 @@ mod tests {
         let with_dll = patch_php_ini_content(ini, true);
         assert!(with_dll.contains("zend_extension=opcache\n") && !with_dll.contains(";zend_extension=opcache"));
         assert!(with_dll.contains("opcache.enable=1\n") && !with_dll.contains(";opcache.enable=1"));
-        assert!(with_dll.contains("opcache.enable_cli=1\n"), "opcache.enable_cli should flip to 1 (was disabled at 0)");
+        // assert!(with_dll.contains("opcache.enable_cli=1\n"), "opcache.enable_cli should flip to 1 (was disabled at 0)");
 
         let without_dll = patch_php_ini_content(ini, false);
         assert!(without_dll.contains(";zend_extension=opcache\n"), "must not uncomment a load directive for a DLL that doesn't exist (PHP 8.5+ builds OPcache into core)");
