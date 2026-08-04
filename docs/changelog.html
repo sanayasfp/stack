@@ -43,6 +43,26 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.2.1 — 2026-08-04</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.2.1" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>. Follow-up to v0.2.0, fixing three real bugs in <code>stack setup --default-profile</code>.</p>
+      <h2>Fixed</h2>
+      <ul>
+        <li><code>stack deactivate</code> was a silent no-op whenever a default profile was configured — the per-prompt shell hook re-seeded the activation on the very next prompt. Removed entirely by the PATH change below.</li>
+        <li>The <code>[stack]</code> prompt indicator lit up for any profile-provided PATH, not just being inside a project. It's back to reflecting project activation only.</li>
+        <li>Explicit <code>stack profile &lt;name&gt;</code> activation silently skipped a profile's <code>[tool.*]</code> entries on PATH, even though <code>stack exec</code> and the default-profile mechanism both included them.</li>
+        <li>Editing, adding to, or removing from a profile that's the current default no longer leaves the persistent PATH stale — it refreshes automatically.</li>
+      </ul>
+      <h2>Changed</h2>
+      <ul>
+        <li><code>stack setup --default-profile &lt;name&gt;</code> now writes the profile's resolved pins directly into the persistent Windows user PATH (via the registry) instead of a per-prompt shell variable. A brand-new process — interactive or not, <code>stack</code>-aware or not — now finds its languages/tools with no shell hook involved. Already-open terminals/IDEs still need a restart to see it, same as installing anything else that touches PATH.</li>
+      </ul>
+      <h2>Added</h2>
+      <ul>
+        <li><code>stack profile add &lt;name&gt; &lt;language|tool&gt; &lt;entry&gt; [version]</code> / <code>stack profile remove &lt;name&gt; &lt;language|tool&gt; &lt;entry&gt;</code> — structured modification of a saved profile, mirroring <code>stack add</code>/<code>stack remove</code> on <code>stack.toml</code>.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.2.0 — 2026-08-03</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.2.0" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>. The largest feature surface shipped so far — first minor version bump.</p>
       <h2>Added</h2>
