@@ -1,5 +1,8 @@
 use anyhow::{Context, Result, bail};
 use std::process::{Command, Stdio};
+use winreg::RegKey;
+use winreg::enums::{HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_EXPAND_SZ};
+use winreg::types::ToRegValue;
 
 pub fn detach(cmd: &mut Command) {
     use std::os::windows::process::CommandExt;
@@ -110,4 +113,36 @@ fn install_portable_zip(url: &str, name: &str, version: &str) -> Result<()> {
 
     println!("  {name} {version} is at {} (not yet wired onto PATH — resolution is a separate step)", install_dir.display());
     Ok(())
+}
+
+fn user_environment_key() -> Result<RegKey> {
+    RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE).context("failed to open HKCU\\Environment")
+}
+
+fn read_persistent_path() -> Result<String> {
+    Ok(user_environment_key()?.get_value("Path").unwrap_or_default())
+}
+
+/// Preserves the existing registry type of `Path` (normally REG_EXPAND_SZ).
+fn write_persistent_path(path: &str) -> Result<()> {
+    let key = user_environment_key()?;
+    let vtype = key.get_raw_value("Path").map(|v| v.vtype).unwrap_or(REG_EXPAND_SZ);
+    let mut value = path.to_reg_value();
+    value.vtype = vtype;
+    key.set_raw_value("Path", &value).context("failed to write HKCU\\Environment\\Path")
+}
+
+/// Removes `remove` from the persistent user PATH, then prepends `add`, deduplicated.
+pub fn update_persistent_path(remove: &[String], add: &[String]) -> Result<()> {
+    let current = read_persistent_path()?;
+    let mut components: Vec<String> =
+        std::env::split_paths(&current).map(|p| p.to_string_lossy().into_owned()).filter(|c| !remove.iter().any(|r| r.eq_ignore_ascii_case(c))).collect();
+
+    for dir in add.iter().rev() {
+        if !components.iter().any(|c| c.eq_ignore_ascii_case(dir)) {
+            components.insert(0, dir.clone());
+        }
+    }
+
+    write_persistent_path(&components.join(";"))
 }

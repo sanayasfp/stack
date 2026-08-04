@@ -285,13 +285,12 @@ pub fn setup(shell: &str, default_profile: Option<&str>) -> Result<()> {
 
     if let Some(name) = default_profile {
         if name.eq_ignore_ascii_case("none") {
-            crate::core::commands::profile::set_default_profile_name(None)?;
-            println!("cleared the default profile");
+            crate::core::commands::profile::set_default_profile(None)?;
+            println!("cleared the default profile — restart any already-open terminals to drop it from their PATH");
         } else {
-            crate::core::commands::profile::load_profile(name)
-                .with_context(|| format!("no saved profile named '{name}' — run `stack profile` to create one first"))?;
-            crate::core::commands::profile::set_default_profile_name(Some(name))?;
-            println!("'{name}' will auto-activate in new terminals from now on (run `stack setup --default-profile none` to undo)");
+            crate::core::commands::profile::set_default_profile(Some(name))?;
+            println!("'{name}' is now on PATH for every new terminal/process (run `stack setup --default-profile none` to undo)");
+            println!("note: already-open terminals/IDEs won't see this until restarted — Windows caches PATH per-process");
         }
     }
 
@@ -309,41 +308,23 @@ pub fn hook(shell: &str) -> Result<()> {
     Ok(())
 }
 
-/// The profile whose PATH additions should apply ambiently in this shell: an
-/// explicitly-activated saved profile, an ephemeral/unsaved activation's frozen
-/// dirs, or (lazily, first prompt only) a persisted `stack setup --default-profile`.
-/// Re-resolved fresh on every prompt, same as project activation.
-fn active_profile_dirs() -> (Vec<PathBuf>, Option<String>) {
+fn active_profile_dirs() -> Vec<PathBuf> {
     if let Ok(name) = std::env::var("STACK_ACTIVE_PROFILE") {
         return match crate::core::commands::profile::load_profile(&name) {
-            Ok(manifest) => (crate::core::commands::profile::lookup_dirs(&manifest), None),
-            Err(_) => (Vec::new(), None),
+            Ok(manifest) => crate::core::commands::profile::lookup_dirs(&manifest),
+            Err(_) => Vec::new(),
         };
     }
     if let Ok(joined) = std::env::var("STACK_ACTIVE_PROFILE_PATHS") {
-        return (std::env::split_paths(&joined).collect(), None);
+        return std::env::split_paths(&joined).collect();
     }
-    match crate::core::commands::profile::default_profile_name() {
-        Some(name) => match crate::core::commands::profile::load_profile(&name) {
-            Ok(manifest) => (crate::core::commands::profile::lookup_dirs(&manifest), Some(name)),
-            Err(_) => (Vec::new(), None),
-        },
-        None => (Vec::new(), None),
-    }
-}
-
-fn seed_default_profile_env(shell: &str, name: &str) {
-    match shell {
-        "cmd" => println!("SET STACK_ACTIVE_PROFILE={name}"),
-        _ => println!("$env:STACK_ACTIVE_PROFILE = \"{name}\""),
-    }
+    Vec::new()
 }
 
 pub fn activate(shell: &str) {
     let project = Manifest::find_and_load(&PathBuf::from(".")).ok();
-    let (profile_dirs, seed_default) = active_profile_dirs();
 
-    let mut dirs: Vec<PathBuf> = profile_dirs;
+    let mut dirs: Vec<PathBuf> = active_profile_dirs();
     let mut php_binary: Option<PathBuf> = None;
     if let Some((_, manifest)) = &project {
         for (name, entry) in &manifest.language {
@@ -358,13 +339,9 @@ pub fn activate(shell: &str) {
         }
     }
 
-    let stack_active = project.is_some() || !dirs.is_empty();
-    if stack_active {
+    // Only project activation lights the indicator, not profile-provided PATH.
+    if project.is_some() {
         print_active_indicator(shell);
-    }
-
-    if let Some(name) = &seed_default {
-        seed_default_profile_env(shell, name);
     }
 
     let composer_shadow = php_binary.as_ref().and_then(|php| {

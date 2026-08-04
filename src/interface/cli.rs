@@ -218,6 +218,36 @@ enum ProfileAction {
     Edit { name: String },
     /// Delete a saved profile
     Rm { name: String },
+    /// Add a language or tool to a saved profile
+    Add {
+        name: String,
+        /// "language" or "tool"
+        kind: String,
+        /// Name of the entry, e.g. "php", "node"
+        entry_name: String,
+        /// Version to pin (required unless --path is set)
+        version: Option<String>,
+        /// Bring-your-own binary path, bypassing any manager
+        #[arg(long)]
+        path: Option<String>,
+        /// Manager to resolve this language through (language only, e.g. "vfox", "uv")
+        #[arg(long)]
+        manager: Option<String>,
+        /// vfox plugin name override (language only; defaults to the entry name)
+        #[arg(long)]
+        plugin: Option<String>,
+        /// Binary filename override (language only; defaults to the entry name)
+        #[arg(long)]
+        binary: Option<String>,
+    },
+    /// Remove a language or tool from a saved profile
+    Remove {
+        name: String,
+        /// "language" or "tool"
+        kind: String,
+        /// Name of the entry to remove
+        entry_name: String,
+    },
     /// `<name>` activates it; `<name> --exec "<command>"` runs a one-off command with its pins
     #[command(external_subcommand)]
     Activate(Vec<String>),
@@ -271,6 +301,10 @@ pub fn run() {
             Some(ProfileAction::Describe { name }) => profile::describe(&name),
             Some(ProfileAction::Edit { name }) => profile::edit(&name),
             Some(ProfileAction::Rm { name }) => profile::rm(&name),
+            Some(ProfileAction::Add { name, kind, entry_name, version, path, manager, plugin, binary }) => {
+                profile::add(&name, &kind, &entry_name, version, path, manager, plugin, binary)
+            }
+            Some(ProfileAction::Remove { name, kind, entry_name }) => profile::remove(&name, &kind, &entry_name),
             Some(ProfileAction::Activate(raw_args)) => profile::activate_or_exec(&raw_args),
         },
         Command::Deactivate => {

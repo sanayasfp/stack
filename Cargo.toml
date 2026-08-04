@@ -33,6 +33,9 @@ toml_edit = "0.25.13"
 ureq = { version = "3.3.0", features = ["json"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+
 [profile.dist]
 inherits = "release"
 lto = "thin"

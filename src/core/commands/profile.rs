@@ -2,10 +2,11 @@ use anyhow::{Context, Result, anyhow, bail};
 use crate::core::commands::scaffold::{KNOWN_LANGUAGES, ask_version, collect_other_names, select_checkboxes};
 use crate::core::commands::shared::resolve_tool;
 use crate::core::manifest::{Language, Manifest};
+use crate::core::manifest_edit::{self, AddArgs};
 use crate::core::toolchain;
 use std::path::{Path, PathBuf};
 
-const RESERVED_PROFILE_NAMES: &[&str] = &["list", "describe", "edit", "rm"];
+const RESERVED_PROFILE_NAMES: &[&str] = &["list", "describe", "edit", "rm", "add", "remove"];
 
 fn validate_profile_name(name: &str) -> Result<()> {
     if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
@@ -29,8 +30,7 @@ fn profile_exists(name: &str) -> bool {
     profile_file_path(name).map(|p| p.is_file()).unwrap_or(false)
 }
 
-/// Loads a saved profile, reusing `stack.toml`'s own schema — a profile is
-/// just `[language.*]`/`[tool.*]`, and every other section is simply unused.
+/// Loads a saved profile, reusing `stack.toml`'s own manifest schema.
 pub(crate) fn load_profile(name: &str) -> Result<Manifest> {
     let path = profile_file_path(name)?;
     if !path.is_file() {
@@ -75,43 +75,77 @@ fn save_profile(name: &str, languages: &[(String, String)]) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// Resolves whichever bin directories are already installed (no auto-install —
-/// used for shell activation, which shouldn't trigger a download every prompt).
+/// Resolves already-installed bin directories, without triggering installs.
 pub(crate) fn lookup_dirs(manifest: &Manifest) -> Vec<PathBuf> {
-    manifest.language.iter().filter_map(|(n, e)| toolchain::lookup(n, e).and_then(|b| b.parent().map(Path::to_path_buf))).collect()
+    let mut dirs: Vec<PathBuf> = manifest.language.iter().filter_map(|(n, e)| toolchain::lookup(n, e).and_then(|b| b.parent().map(Path::to_path_buf))).collect();
+    dirs.extend(manifest.tool.iter().filter_map(|(n, t)| resolve_tool(n, t, false).ok().and_then(|b| b.parent().map(Path::to_path_buf))));
+    dirs
 }
 
-fn default_profile_config_path() -> Result<PathBuf> {
-    Ok(dirs::home_dir().ok_or_else(|| anyhow!("could not resolve home directory"))?.join(".stack").join("default_profile"))
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+struct DefaultProfileRecord {
+    name: Option<String>,
+    /// Dirs `stack` itself added to the persistent user PATH, tracked so a later
+    /// change/clear removes exactly those and nothing the user put there themselves.
+    injected_dirs: Vec<String>,
 }
 
-/// Persisted name for `stack setup --default-profile`, ambiently auto-activated
-/// in every new terminal. Distinct from the `default`-named-profile convention.
-pub(crate) fn default_profile_name() -> Option<String> {
-    let path = default_profile_config_path().ok()?;
-    let name = std::fs::read_to_string(path).ok()?.trim().to_string();
-    if name.is_empty() { None } else { Some(name) }
+fn default_profile_record_path() -> Result<PathBuf> {
+    Ok(dirs::home_dir().ok_or_else(|| anyhow!("could not resolve home directory"))?.join(".stack").join("default_profile.json"))
 }
 
-pub(crate) fn set_default_profile_name(name: Option<&str>) -> Result<()> {
-    let path = default_profile_config_path()?;
-    match name {
-        Some(n) => {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).context("failed to create ~/.stack")?;
-            }
-            std::fs::write(&path, n).with_context(|| format!("failed to write {}", path.display()))
-        }
-        None => {
-            let _ = std::fs::remove_file(&path);
-            Ok(())
-        }
+fn load_default_profile_record() -> DefaultProfileRecord {
+    default_profile_record_path()
+        .ok()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_default_profile_record(record: &DefaultProfileRecord) -> Result<()> {
+    let path = default_profile_record_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).context("failed to create ~/.stack")?;
     }
+    std::fs::write(&path, serde_json::to_string_pretty(record)?).with_context(|| format!("failed to write {}", path.display()))
 }
 
-/// Emits the shell code that applies `dirs` to PATH and records which activation
-/// is now live (`name` for a saved profile, `None` for an ephemeral/unsaved one) —
-/// only ever printed to stdout, since the calling shell wrapper evaluates it.
+/// Name set via `stack setup --default-profile`.
+pub(crate) fn default_profile_name() -> Option<String> {
+    load_default_profile_record().name
+}
+
+/// Writes `name`'s resolved pins into the persistent user PATH.
+pub fn set_default_profile(name: Option<&str>) -> Result<()> {
+    let mut record = load_default_profile_record();
+    let old_dirs = std::mem::take(&mut record.injected_dirs);
+
+    let new_dirs: Vec<String> = match name {
+        Some(n) => {
+            validate_profile_name(n)?;
+            let manifest = load_profile(n)?;
+            resolve_dirs_eager(&manifest)?.into_iter().map(|p| p.to_string_lossy().into_owned()).collect()
+        }
+        None => Vec::new(),
+    };
+
+    crate::platform::update_persistent_path(&old_dirs, &new_dirs)?;
+
+    record.name = name.map(str::to_string);
+    record.injected_dirs = new_dirs;
+    save_default_profile_record(&record)
+}
+
+/// Re-applies `name` as the default profile if it already is one.
+fn refresh_default_if_current(name: &str) -> Result<()> {
+    if default_profile_name().as_deref() == Some(name) {
+        set_default_profile(Some(name))?;
+        println!("refreshed the default profile's PATH entries to match");
+    }
+    Ok(())
+}
+
+/// Prints the shell code that applies `dirs` to PATH.
 fn emit_activation_script(name: Option<&str>, dirs: &[PathBuf]) {
     let joined = std::env::join_paths(dirs).map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     match crate::core::shell::detect_shell().as_str() {
@@ -138,9 +172,7 @@ fn emit_activation_script(name: Option<&str>, dirs: &[PathBuf]) {
     }
 }
 
-/// Activates a saved profile in the current shell: sets `STACK_ACTIVE_PROFILE`
-/// (re-resolved fresh on every later prompt, same as project activation) and
-/// applies its PATH additions immediately.
+/// Activates a saved profile in the current shell.
 pub fn activate(name: &str) -> Result<()> {
     validate_profile_name(name)?;
     let manifest = load_profile(name)?;
@@ -179,8 +211,7 @@ fn ask_profile_name() -> Result<String> {
     }
 }
 
-/// `stack profile` with no arguments: same language-picking flow as `stack new`,
-/// then one choice of what to do with the result (activate / save / both).
+/// Interactive wizard for `stack profile` with no arguments.
 pub fn wizard() -> Result<()> {
     let mut lang_names = select_checkboxes("languages (space to toggle, enter to confirm)", KNOWN_LANGUAGES, &[])?;
     lang_names.extend(collect_other_names("language")?);
@@ -224,9 +255,7 @@ enum ProfileInvocation<'a> {
     Exec(&'a str, &'a str),
 }
 
-/// Parses the one positional-only form of `stack profile <name>` (bare
-/// activate, or `--exec "<command>"` for a stateless one-off run) out of the
-/// raw tokens clap's `external_subcommand` catches for an unmatched profile name.
+/// Parses the bare-activate or `--exec` form of `stack profile <name>`.
 fn parse_activation_args(raw_args: &[String]) -> Result<ProfileInvocation<'_>> {
     let name = raw_args.first().ok_or_else(|| anyhow!("stack profile <name> (or `stack profile` alone for the wizard)"))?;
 
@@ -248,8 +277,7 @@ pub fn activate_or_exec(raw_args: &[String]) -> Result<()> {
     }
 }
 
-/// Resolves every declared language/tool, installing anything missing (an
-/// explicit `--exec` means "make this work now", unlike passive activation).
+/// Resolves every declared language/tool, installing anything missing.
 fn resolve_dirs_eager(manifest: &Manifest) -> Result<Vec<PathBuf>> {
     let mut dirs = Vec::new();
     for (name, entry) in &manifest.language {
@@ -267,8 +295,7 @@ fn resolve_dirs_eager(manifest: &Manifest) -> Result<Vec<PathBuf>> {
     Ok(dirs)
 }
 
-/// Spawns `program`/`args` with `dirs` prepended to PATH, replacing this process's
-/// exit code with the child's — used by every "resolve, run, exit" exec path.
+/// Spawns `program`/`args` with `dirs` prepended to PATH, then exits with its status.
 fn spawn_with_path(dirs: &[PathBuf], program: &str, args: &[String]) -> Result<()> {
     let mut path_dirs = dirs.to_vec();
     if let Ok(existing) = std::env::var("PATH") {
@@ -296,8 +323,7 @@ fn exec_in_profile(name: &str, command_str: &str) -> Result<()> {
     run_with_path(&dirs, command_str)
 }
 
-/// `stack exec --with php@8.3.1,node@20 -- npm run build` — resolves ad hoc
-/// pins with no named profile at all, runs the command, exits with its code.
+/// Resolves ad hoc `name@version` pins with no named profile, runs the command.
 pub fn exec_with(with: &str, command: &[String]) -> Result<()> {
     let (program, args) = command.split_first().ok_or_else(|| anyhow!("stack exec --with <name@version,...> -- <command> [args...]"))?;
     let mut dirs = Vec::new();
@@ -379,7 +405,7 @@ pub fn edit(name: &str) -> Result<()> {
         bail!("editor exited with a non-zero status");
     }
     Manifest::load(&path).with_context(|| format!("{} no longer parses correctly after editing", path.display()))?;
-    Ok(())
+    refresh_default_if_current(name)
 }
 
 pub fn rm(name: &str) -> Result<()> {
@@ -388,9 +414,56 @@ pub fn rm(name: &str) -> Result<()> {
     if !path.is_file() {
         bail!("no saved profile named '{name}'");
     }
+    let was_default = default_profile_name().as_deref() == Some(name);
     std::fs::remove_file(&path).with_context(|| format!("failed to remove {}", path.display()))?;
     println!("removed profile '{name}'");
+    if was_default {
+        set_default_profile(None)?;
+        println!("'{name}' was the default profile — cleared, and its PATH entries removed");
+    }
     Ok(())
+}
+
+/// Adds a language or tool to a saved profile.
+#[allow(clippy::too_many_arguments)]
+pub fn add(
+    profile: &str,
+    kind: &str,
+    name: &str,
+    version: Option<String>,
+    path: Option<String>,
+    manager: Option<String>,
+    plugin: Option<String>,
+    binary: Option<String>,
+) -> Result<()> {
+    validate_profile_name(profile)?;
+    if !matches!(kind, "language" | "tool") {
+        bail!("stack profile add only supports 'language' or 'tool' — a profile has no [service.*]/[run]/[[clone]]");
+    }
+    let profile_path = profile_file_path(profile)?;
+    if !profile_path.is_file() {
+        bail!("no saved profile named '{profile}' — run `stack profile` to create one first");
+    }
+    let extra = AddArgs { path, manager, plugin, binary, ..Default::default() };
+    manifest_edit::add(&profile_path, kind, name, version.as_deref(), &extra)?;
+    Manifest::load(&profile_path).with_context(|| format!("profile was updated but no longer parses correctly: {}", profile_path.display()))?;
+    println!("added {kind} '{name}' to profile '{profile}'");
+    refresh_default_if_current(profile)
+}
+
+pub fn remove(profile: &str, kind: &str, name: &str) -> Result<()> {
+    validate_profile_name(profile)?;
+    if !matches!(kind, "language" | "tool") {
+        bail!("stack profile remove only supports 'language' or 'tool'");
+    }
+    let profile_path = profile_file_path(profile)?;
+    if !profile_path.is_file() {
+        bail!("no saved profile named '{profile}'");
+    }
+    manifest_edit::remove(&profile_path, kind, name)?;
+    Manifest::load(&profile_path).with_context(|| format!("profile was updated but no longer parses correctly: {}", profile_path.display()))?;
+    println!("removed {kind} '{name}' from profile '{profile}'");
+    refresh_default_if_current(profile)
 }
 
 pub fn deactivate() {
@@ -412,8 +485,7 @@ pub fn deactivate() {
     }
 }
 
-/// The active profile context for unscoped resolution: an explicitly-activated
-/// profile, else the reserved `default`-named profile if one exists.
+/// The active profile for unscoped resolution: explicit, else `default` if it exists.
 fn effective_profile_context() -> Option<String> {
     std::env::var("STACK_ACTIVE_PROFILE").ok().or_else(|| profile_exists("default").then(|| "default".to_string()))
 }
@@ -432,10 +504,11 @@ pub fn which(name: Option<String>) -> Result<()> {
             match &active_profile {
                 Some(n) => println!("active profile: {n}"),
                 None if ephemeral_active => println!("active profile: (ad hoc, unsaved)"),
-                None => match default_profile_name() {
-                    Some(d) => println!("active profile: (none explicitly activated; '{d}' set via `stack setup --default-profile`)"),
-                    None => println!("active profile: (none)"),
-                },
+                None => println!("active profile: (none explicitly activated in this shell)"),
+            }
+            match default_profile_name() {
+                Some(d) => println!("default profile: '{d}' — its tools are on PATH globally (set via `stack setup --default-profile`)"),
+                None => println!("default profile: (none)"),
             }
             Ok(())
         }

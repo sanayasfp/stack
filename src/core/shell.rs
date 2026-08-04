@@ -80,7 +80,7 @@ function stack {{
     $needsEval = $false
     if ($args.Count -gt 0 -and $args[0] -eq "load-env") {{ $needsEval = $true }}
     elseif ($args.Count -gt 0 -and $args[0] -eq "deactivate") {{ $needsEval = $true }}
-    elseif ($args.Count -gt 0 -and $args[0] -eq "profile" -and ($args -notcontains "--exec") -and ($args.Count -eq 1 -or $args[1] -notin @("list", "describe", "edit", "rm"))) {{ $needsEval = $true }}
+    elseif ($args.Count -gt 0 -and $args[0] -eq "profile" -and ($args -notcontains "--exec") -and ($args.Count -eq 1 -or $args[1] -notin @("list", "describe", "edit", "rm", "add", "remove"))) {{ $needsEval = $true }}
     if ($needsEval) {{
         $stackOut = & stack.exe @args
         if ($LASTEXITCODE -eq 0) {{
