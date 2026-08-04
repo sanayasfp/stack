@@ -43,6 +43,22 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.2.2 — 2026-08-04</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.2.2" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>. New manifest features from real dogfooding, plus a proper <code>activate</code>/<code>deactivate</code> pair for projects.</p>
+      <h2>Added</h2>
+      <ul>
+        <li><code>[project].env_files</code> — extra <code>.env</code> paths loaded alongside the root <code>.env</code>. <code>stack load-env</code> now falls back to the root <code>.env</code> plus any declared <code>env_files</code> when no path is given, instead of hard-failing when <code>.env</code> isn't at the project root.</li>
+        <li><code>[language.*].venv</code> — a project's virtualenv directory, folded into the existing ambient <code>stack activate</code> PATH-building. No more <code>.venv\Scripts\activate</code> step — just <code>cd</code> in. <code>stack doctor --project</code> reports whether it exists.</li>
+        <li><code>[script.&lt;name&gt;]</code> + <code>stack run &lt;name&gt;</code> — named, project-scoped commands (migrations, tests, seed scripts, ...), run in the foreground. Commands can be a multi-line string or a TOML array, split into sequential steps that stop at the first failure with its exit code. Trailing args forward to the last step (<code>stack run test -- -k foo</code>); <code>stack run</code> alone lists what's declared. Gets its own lazy trust-on-first-use, checked only when a script actually runs.</li>
+      </ul>
+      <h2>Changed</h2>
+      <ul>
+        <li><code>stack deactivate</code> now also suppresses the current directory's project activation (PATH, prompt indicator), not just an explicitly-activated profile — previously the only way to turn it off was to leave the directory. It stays suppressed while you're inside that project and clears itself automatically once you actually leave.</li>
+        <li><code>stack activate</code> with no shell argument is a new explicit command that reactivates a suppressed project without leaving its directory — the counterpart to <code>stack deactivate</code>.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.2.1 — 2026-08-04</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.2.1" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>. Follow-up to v0.2.0, fixing three real bugs in <code>stack setup --default-profile</code>.</p>
       <h2>Fixed</h2>
