@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
 use crate::core::caddy;
-use crate::core::commands::shared::resolve_tool;
+use crate::core::commands::shared::{self, resolve_tool};
 use crate::core::manifest::{self, CloneEntry, Manifest, Service};
 use crate::core::process::{self, Runnable};
 use crate::core::projects::{ProjectRecord, ProjectsFile};
@@ -80,14 +80,31 @@ pub(crate) fn port_in_use(port: u16) -> bool {
     std::net::TcpStream::connect(("127.0.0.1", port)).is_ok()
 }
 
-fn build_path_env(resolved_binaries: &[PathBuf]) -> String {
+fn build_path_env(resolved_binaries: &[PathBuf], extra_dirs: &[PathBuf]) -> String {
     let mut dirs: Vec<PathBuf> = resolved_binaries.iter().filter_map(|p| p.parent().map(Path::to_path_buf)).collect();
+    dirs.extend(extra_dirs.iter().cloned());
     if let Some(existing) = std::env::var_os("PATH") {
         dirs.extend(std::env::split_paths(&existing));
     }
     std::env::join_paths(dirs)
         .map(|os_string| os_string.to_string_lossy().into_owned())
         .unwrap_or_default()
+}
+
+/// Resolves each declared language's bin dir plus any `[language.*].venv` dir.
+fn resolve_language_path_dirs(manifest: &Manifest, project_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let mut resolved_binaries = Vec::new();
+    let mut venv_dirs = Vec::new();
+    for (name, entry) in &manifest.language {
+        match toolchain::resolve(name, entry) {
+            Ok(bin) => resolved_binaries.push(bin),
+            Err(e) => eprintln!("  {}: {e:#}", style::err(name)),
+        }
+        if let Some(venv) = entry.venv() {
+            venv_dirs.push(shared::venv_bin_dir(project_dir, venv));
+        }
+    }
+    (resolved_binaries, venv_dirs)
 }
 
 fn resolve_project_name(explicit: Option<String>) -> Result<String> {
@@ -305,33 +322,37 @@ fn process_clones(project_dir: &Path, clones: &[CloneEntry]) -> Result<()> {
     Ok(())
 }
 
-/// Loads a project's .env into the process environment, if present.
-pub(crate) fn auto_load_dotenv(project_dir: &Path) {
-    let env_path = project_dir.join(".env");
-    if !env_path.is_file() {
-        return;
-    }
-    let iter = match dotenvy::from_path_iter(&env_path) {
-        Ok(iter) => iter,
-        Err(e) => {
-            eprintln!("  .env: warning: failed to open: {e}");
-            return;
+/// Loads a project's root .env plus any `[project].env_files`, if present.
+pub(crate) fn auto_load_dotenv(project_dir: &Path, extra_files: &[String]) {
+    let mut candidates = vec![project_dir.join(".env")];
+    candidates.extend(extra_files.iter().map(|f| project_dir.join(f)));
+
+    for env_path in candidates {
+        if !env_path.is_file() {
+            continue;
         }
-    };
-    let mut loaded = Vec::new();
-    for item in iter {
-        match item {
-            Ok((key, value)) => {
-                unsafe {
-                    std::env::set_var(&key, &value);
-                }
-                loaded.push(key);
+        let iter = match dotenvy::from_path_iter(&env_path) {
+            Ok(iter) => iter,
+            Err(e) => {
+                eprintln!("  {}: warning: failed to open: {e}", env_path.display());
+                continue;
             }
-            Err(e) => eprintln!("  .env: warning: failed to parse: {e}"),
+        };
+        let mut loaded = Vec::new();
+        for item in iter {
+            match item {
+                Ok((key, value)) => {
+                    unsafe {
+                        std::env::set_var(&key, &value);
+                    }
+                    loaded.push(key);
+                }
+                Err(e) => eprintln!("  {}: warning: failed to parse: {e}", env_path.display()),
+            }
         }
-    }
-    if !loaded.is_empty() {
-        println!("  .env: loaded {}", loaded.join(", "));
+        if !loaded.is_empty() {
+            println!("  {}: loaded {}", env_path.display(), loaded.join(", "));
+        }
     }
 }
 
@@ -347,7 +368,7 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
     println!("  languages: {}", join_names(manifest.language.keys()));
     println!("  services: {}", join_names(manifest.service.keys()));
 
-    auto_load_dotenv(&project_dir);
+    auto_load_dotenv(&project_dir, &manifest.project.env_files);
     trust::ensure_trusted(&project_dir, &manifest, auto_yes)?;
 
     if run_clones {
@@ -357,6 +378,7 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
     }
 
     let mut resolved_binaries: Vec<PathBuf> = Vec::new();
+    let mut venv_dirs: Vec<PathBuf> = Vec::new();
 
     for (name, entry) in &manifest.language {
         match toolchain::resolve(name, entry) {
@@ -365,6 +387,9 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
                 resolved_binaries.push(bin);
             }
             Err(e) => eprintln!("  {}: {e:#}", style::err(name)),
+        }
+        if let Some(venv) = entry.venv() {
+            venv_dirs.push(shared::venv_bin_dir(&project_dir, venv));
         }
     }
 
@@ -475,7 +500,7 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
             })?;
             let mut extra_env = BTreeMap::new();
             extra_env.insert("PORT".to_string(), port.to_string());
-            extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries));
+            extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries, &venv_dirs));
             (resolved_command, extra_env, None)
         }
         None => {
@@ -493,7 +518,7 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
             let resolved_command = format!("{} -b 127.0.0.1:{port}", shell_words::quote(&shell_safe_path(&php_cgi.to_string_lossy())));
             let mut extra_env = BTreeMap::new();
             extra_env.insert("PORT".to_string(), port.to_string());
-            extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries));
+            extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries, &venv_dirs));
             let workers = php_entry.workers().unwrap_or(4);
             extra_env.insert("PHP_FCGI_CHILDREN".to_string(), workers.to_string());
             extra_env.insert("PHP_FCGI_MAX_REQUESTS".to_string(), "500".to_string());
@@ -520,6 +545,61 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
     }
     save_state(&state);
 
+    Ok(())
+}
+
+/// Runs a `[script.<name>]` entry's steps in order; with no `name`, lists them instead.
+pub fn run_script(name: Option<String>, extra_args: &[String], auto_yes: bool) -> Result<()> {
+    let (path, manifest) = Manifest::find_and_load(&PathBuf::from("."))?;
+    let project_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+
+    let Some(name) = name else {
+        if manifest.script.is_empty() {
+            println!("no [script.*] entries declared in {}", path.display());
+        } else {
+            println!("available scripts:");
+            for script_name in manifest.script.keys() {
+                println!("  {script_name}");
+            }
+        }
+        return Ok(());
+    };
+
+    let entry = manifest.script.get(&name).ok_or_else(|| anyhow!("no [script.{name}] declared in {}", path.display()))?;
+    let steps = entry.command.steps();
+    if steps.is_empty() {
+        bail!("[script.{name}].command is empty");
+    }
+
+    trust::ensure_script_trusted(&project_dir, &name, &steps.join("\n"), auto_yes)?;
+    auto_load_dotenv(&project_dir, &manifest.project.env_files);
+
+    let (resolved_binaries, venv_dirs) = resolve_language_path_dirs(&manifest, &project_dir);
+    let path_env = build_path_env(&resolved_binaries, &venv_dirs);
+    let script_cwd = project_dir.join(&entry.cwd);
+
+    let last = steps.len() - 1;
+    for (i, step) in steps.iter().enumerate() {
+        let mut step_text = step.clone();
+        if i == last && !extra_args.is_empty() {
+            step_text.push(' ');
+            step_text.push_str(&shell_words::join(extra_args));
+        }
+        let resolved = placeholder::resolve(&step_text, &BTreeMap::new(), true).map_err(|missing| anyhow!("missing required value(s): {}", missing.join(", ")))?;
+        let parts = shell_words::split(&resolved).with_context(|| format!("could not parse script step '{resolved}'"))?;
+        let (program, args) = parts.split_first().ok_or_else(|| anyhow!("[script.{name}] step is empty"))?;
+
+        println!("  {}", style::ok(&resolved));
+        let status = std::process::Command::new(program)
+            .args(args)
+            .current_dir(&script_cwd)
+            .env("PATH", &path_env)
+            .status()
+            .with_context(|| format!("failed to run '{resolved}'"))?;
+        if !status.success() {
+            std::process::exit(status.code().unwrap_or(1));
+        }
+    }
     Ok(())
 }
 

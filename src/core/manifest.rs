@@ -17,6 +17,8 @@ pub struct Manifest {
     pub run: Option<Run>,
     #[serde(default)]
     pub tool: BTreeMap<String, Tool>,
+    #[serde(default)]
+    pub script: BTreeMap<String, ScriptEntry>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -24,6 +26,8 @@ pub struct Project {
     #[serde(default)]
     pub name: String,
     pub domain: Option<String>,
+    #[serde(default)]
+    pub env_files: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,6 +71,7 @@ pub enum Language {
         binary: Option<String>,
         path: Option<String>,
         workers: Option<u32>,
+        venv: Option<String>,
     },
 }
 
@@ -110,6 +115,13 @@ impl Language {
         match self {
             Language::Simple(_) => None,
             Language::Detailed { workers, .. } => *workers,
+        }
+    }
+
+    pub fn venv(&self) -> Option<&str> {
+        match self {
+            Language::Simple(_) => None,
+            Language::Detailed { venv, .. } => venv.as_deref(),
         }
     }
 }
@@ -227,6 +239,30 @@ impl Run {
 pub struct Tool {
     pub path: Option<String>,
     pub version: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum CommandSpec {
+    Single(String),
+    Multi(Vec<String>),
+}
+
+impl CommandSpec {
+    /// Sequential steps: a `Multi` array as-is, a `Single` string split on newlines.
+    pub fn steps(&self) -> Vec<String> {
+        match self {
+            CommandSpec::Single(s) => s.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect(),
+            CommandSpec::Multi(steps) => steps.iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ScriptEntry {
+    pub command: CommandSpec,
+    #[serde(default = "default_cwd")]
+    pub cwd: String,
 }
 
 impl Manifest {
@@ -443,6 +479,81 @@ mod tests {
         let lang = map.get("legacyphp").unwrap();
         assert_eq!(lang.path(), Some("C:/tools/php-5.6/php.exe"));
         assert_eq!(lang.version(), None);
+    }
+
+    #[test]
+    fn language_venv_field_parses() {
+        let map: BTreeMap<String, Language> = toml::from_str("[python]\nversion = \"3.11.9\"\nvenv = \"efinenv\"\n").unwrap();
+        let lang = map.get("python").unwrap();
+        assert_eq!(lang.venv(), Some("efinenv"));
+    }
+
+    #[test]
+    fn language_simple_form_has_no_venv() {
+        let map: BTreeMap<String, Language> = toml::from_str("php = \"8.3.1\"\n").unwrap();
+        assert_eq!(map.get("php").unwrap().venv(), None);
+    }
+
+    #[derive(Deserialize)]
+    struct CommandSpecWrapper {
+        command: CommandSpec,
+    }
+
+    fn parse_command_spec(toml: &str) -> CommandSpec {
+        toml::from_str::<CommandSpecWrapper>(toml).unwrap().command
+    }
+
+    #[test]
+    fn command_spec_single_line_string_is_one_step() {
+        let spec = parse_command_spec("command = \"php -S 127.0.0.1:8000\"\n");
+        assert_eq!(spec.steps(), vec!["php -S 127.0.0.1:8000".to_string()]);
+    }
+
+    #[test]
+    fn command_spec_multiline_string_splits_into_steps() {
+        let spec = parse_command_spec("command = \"\"\"\nstep one\nstep two\n\"\"\"\n");
+        assert_eq!(spec.steps(), vec!["step one".to_string(), "step two".to_string()]);
+    }
+
+    #[test]
+    fn command_spec_array_form_is_steps_as_given() {
+        let spec = parse_command_spec("command = [\"step one\", \"step two\"]\n");
+        assert_eq!(spec.steps(), vec!["step one".to_string(), "step two".to_string()]);
+    }
+
+    #[test]
+    fn command_spec_ignores_blank_lines() {
+        let spec = parse_command_spec("command = \"\"\"\nstep one\n\n\nstep two\n\"\"\"\n");
+        assert_eq!(spec.steps(), vec!["step one".to_string(), "step two".to_string()]);
+    }
+
+    #[test]
+    fn script_entry_parses_with_default_cwd() {
+        let tmp = std::env::temp_dir().join(format!("stack-test-script-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let manifest = write_and_load(&tmp, "[script.migrate]\ncommand = \"python manage.py migrate\"\n");
+        let script = manifest.script.get("migrate").unwrap();
+        assert_eq!(script.cwd, ".");
+        assert_eq!(script.command.steps(), vec!["python manage.py migrate".to_string()]);
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn project_env_files_defaults_to_empty() {
+        let tmp = std::env::temp_dir().join(format!("stack-test-envfiles-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let manifest = write_and_load(&tmp, "[project]\nname = \"x\"\n");
+        assert!(manifest.project.env_files.is_empty());
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn project_env_files_parses_list() {
+        let tmp = std::env::temp_dir().join(format!("stack-test-envfiles2-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        let manifest = write_and_load(&tmp, "[project]\nname = \"x\"\nenv_files = [\"nested/.env\"]\n");
+        assert_eq!(manifest.project.env_files, vec!["nested/.env".to_string()]);
+        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]

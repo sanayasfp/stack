@@ -3,6 +3,11 @@ use crate::core::manifest::Tool;
 use crate::core::registry::Registry;
 use std::path::{Path, PathBuf};
 
+pub(crate) fn venv_bin_dir(project_dir: &Path, venv: &str) -> PathBuf {
+    let sub = if cfg!(windows) { "Scripts" } else { "bin" };
+    project_dir.join(venv).join(sub)
+}
+
 pub(crate) fn composer_phar_path(version: &str) -> Result<PathBuf> {
     Ok(dirs::home_dir()
         .ok_or_else(|| anyhow!("could not resolve home directory"))?

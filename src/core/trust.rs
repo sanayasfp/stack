@@ -48,17 +48,9 @@ pub fn risky_fields(manifest: &Manifest) -> String {
     lines.join("\n")
 }
 
-/// Confirms once per distinct set of risky commands before they can execute; `auto_yes` skips the prompt.
-pub fn ensure_trusted(project_dir: &Path, manifest: &Manifest, auto_yes: bool) -> Result<()> {
-    let risky = risky_fields(manifest);
-    if risky.is_empty() {
-        return Ok(());
-    }
-
-    let key = project_dir.display().to_string();
-    let mut trust = TrustFile::load();
+fn confirm_and_store(trust: &mut TrustFile, key: String, current: String, auto_yes: bool) -> Result<()> {
     let previous = trust.approved.get(&key);
-    if previous == Some(&risky) {
+    if previous == Some(&current) {
         return Ok(());
     }
 
@@ -68,13 +60,13 @@ pub fn ensure_trusted(project_dir: &Path, manifest: &Manifest, auto_yes: bool) -
             for line in prev.lines() {
                 println!("  - {line}");
             }
-            for line in risky.lines() {
+            for line in current.lines() {
                 println!("  + {line}");
             }
         }
         None => {
-            println!("first run for this project — stack.toml will execute:");
-            for line in risky.lines() {
+            println!("first run for this — stack.toml will execute:");
+            for line in current.lines() {
                 println!("  {line}");
             }
         }
@@ -89,8 +81,25 @@ pub fn ensure_trusted(project_dir: &Path, manifest: &Manifest, auto_yes: bool) -
         bail!("not trusted — aborted, nothing started");
     }
 
-    trust.approved.insert(key, risky);
+    trust.approved.insert(key, current);
     trust.save().context("failed to persist trust.json")
+}
+
+/// Confirms once per distinct set of risky commands before they can execute; `auto_yes` skips the prompt.
+pub fn ensure_trusted(project_dir: &Path, manifest: &Manifest, auto_yes: bool) -> Result<()> {
+    let risky = risky_fields(manifest);
+    if risky.is_empty() {
+        return Ok(());
+    }
+    let mut trust = TrustFile::load();
+    confirm_and_store(&mut trust, project_dir.display().to_string(), risky, auto_yes)
+}
+
+/// Same as `ensure_trusted`, scoped to one `[script.*]` entry.
+pub fn ensure_script_trusted(project_dir: &Path, script_name: &str, command_repr: &str, auto_yes: bool) -> Result<()> {
+    let key = format!("{}::script:{script_name}", project_dir.display());
+    let mut trust = TrustFile::load();
+    confirm_and_store(&mut trust, key, command_repr.to_string(), auto_yes)
 }
 
 #[cfg(test)]

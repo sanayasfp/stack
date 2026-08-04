@@ -168,13 +168,21 @@ fn doctor_project() -> Result<()> {
         Manifest::find_and_load(&PathBuf::from(".")).context("stack doctor --project: no stack.toml found in this directory or any parent")?;
     println!("checking {}...", path.display());
     let project_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
-    auto_load_dotenv(&project_dir);
+    auto_load_dotenv(&project_dir, &manifest.project.env_files);
     let mut all_ok = true;
 
     for (name, entry) in &manifest.language {
         match toolchain::lookup(name, entry) {
             Some(bin) => println!("  language.{name}: {} ({})", style::ok("OK"), bin.display()),
             None => println!("  language.{name}: {}", style::warn("not installed yet (will be installed on `stack up`)")),
+        }
+        if let Some(venv) = entry.venv() {
+            let venv_dir = crate::core::commands::shared::venv_bin_dir(&project_dir, venv);
+            if venv_dir.is_dir() {
+                println!("    venv: {} ({})", venv, style::ok("OK"));
+            } else {
+                println!("    venv: {} ({})", venv, style::err(&format!("not found at {}", venv_dir.display())));
+            }
         }
     }
 
@@ -321,12 +329,49 @@ fn active_profile_dirs() -> Vec<PathBuf> {
     Vec::new()
 }
 
+fn clear_project_deactivated_flag(shell: &str) {
+    match shell {
+        "cmd" => println!("SET STACK_PROJECT_DEACTIVATED="),
+        _ => println!("Remove-Item Env:\\STACK_PROJECT_DEACTIVATED -ErrorAction SilentlyContinue"),
+    }
+}
+
+/// Explicit `stack activate`: reactivates the current project, undoing a `stack deactivate`.
+pub fn activate_explicit() {
+    let shell = crate::core::shell::detect_shell();
+    let Some((manifest_path, _)) = Manifest::find_and_load(&PathBuf::from(".")).ok() else {
+        eprintln!("not inside a stack-managed directory");
+        return;
+    };
+    let dir = manifest_path.parent().unwrap_or(Path::new(".")).display().to_string();
+
+    if std::env::var("STACK_PROJECT_DEACTIVATED").ok().as_deref() == Some(dir.as_str()) {
+        clear_project_deactivated_flag(&shell);
+        unsafe {
+            std::env::remove_var("STACK_PROJECT_DEACTIVATED");
+        }
+        eprintln!("reactivated project at {dir}");
+    } else {
+        eprintln!("already active");
+    }
+    activate(&shell);
+}
+
 pub fn activate(shell: &str) {
     let project = Manifest::find_and_load(&PathBuf::from(".")).ok();
+    let project_dir_str = project.as_ref().and_then(|(p, _)| p.parent()).map(|d| d.display().to_string());
+
+    let deactivated_dir = std::env::var("STACK_PROJECT_DEACTIVATED").ok();
+    let suppressed = deactivated_dir.as_deref().is_some_and(|d| Some(d) == project_dir_str.as_deref());
+    if deactivated_dir.is_some() && !suppressed {
+        clear_project_deactivated_flag(shell);
+    }
+    let project = if suppressed { None } else { project };
 
     let mut dirs: Vec<PathBuf> = active_profile_dirs();
     let mut php_binary: Option<PathBuf> = None;
-    if let Some((_, manifest)) = &project {
+    if let Some((manifest_path, manifest)) = &project {
+        let project_dir = manifest_path.parent().unwrap_or(Path::new("."));
         for (name, entry) in &manifest.language {
             if let Some(bin) = toolchain::lookup(name, entry) {
                 if name == "php" {
@@ -335,6 +380,9 @@ pub fn activate(shell: &str) {
                 if let Some(p) = bin.parent() {
                     dirs.push(p.to_path_buf());
                 }
+            }
+            if let Some(venv) = entry.venv() {
+                dirs.push(crate::core::commands::shared::venv_bin_dir(project_dir, venv));
             }
         }
     }
@@ -424,21 +472,43 @@ fn escape_pwsh_double_quoted(value: &str) -> String {
     value.replace('`', "``").replace('$', "`$").replace('"', "`\"")
 }
 
-pub fn load_env(path: Option<String>) -> Result<()> {
-    let path = path.unwrap_or_else(|| ".env".to_string());
-    let iter = dotenvy::from_path_iter(&path).with_context(|| format!("failed to open {path}"))?;
+fn load_env_file(path: &Path) -> Result<()> {
+    let iter = dotenvy::from_path_iter(path).with_context(|| format!("failed to open {}", path.display()))?;
 
     let mut names = Vec::new();
     for item in iter {
-        let (key, value) = item.with_context(|| format!("failed to parse {path}"))?;
+        let (key, value) = item.with_context(|| format!("failed to parse {}", path.display()))?;
         println!("$env:{key} = \"{}\"", escape_pwsh_double_quoted(&value));
         names.push(key);
     }
 
     if names.is_empty() {
-        eprintln!("loaded: (no variables found in {path})");
+        eprintln!("loaded: (no variables found in {})", path.display());
     } else {
         eprintln!("loaded: {}", names.join(", "));
+    }
+    Ok(())
+}
+
+/// With an explicit path, loads exactly that file; otherwise loads `.env` plus any
+/// `[project].env_files` that exist (error only if none do).
+pub fn load_env(path: Option<String>) -> Result<()> {
+    if let Some(p) = path {
+        return load_env_file(Path::new(&p));
+    }
+
+    let mut candidates = vec![PathBuf::from(".env")];
+    if let Ok((manifest_path, manifest)) = Manifest::find_and_load(&PathBuf::from(".")) {
+        let project_dir = manifest_path.parent().unwrap_or(Path::new(".")).to_path_buf();
+        candidates.extend(manifest.project.env_files.iter().map(|f| project_dir.join(f)));
+    }
+
+    let existing: Vec<PathBuf> = candidates.iter().filter(|p| p.is_file()).cloned().collect();
+    if existing.is_empty() {
+        bail!("no .env file found (checked {})", candidates.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", "));
+    }
+    for p in existing {
+        load_env_file(&p)?;
     }
     Ok(())
 }

@@ -469,19 +469,36 @@ pub fn remove(profile: &str, kind: &str, name: &str) -> Result<()> {
 pub fn deactivate() {
     let had_profile = std::env::var("STACK_ACTIVE_PROFILE").is_ok();
     let had_paths = std::env::var("STACK_ACTIVE_PROFILE_PATHS").is_ok();
-    if !had_profile && !had_paths {
-        eprintln!("no profile is currently activated");
+
+    let project_dir = Manifest::find_and_load(&PathBuf::from(".")).ok().and_then(|(p, _)| p.parent().map(|d| d.display().to_string()));
+    let project_already_suppressed = project_dir.is_some() && std::env::var("STACK_PROJECT_DEACTIVATED").ok() == project_dir;
+    let project_active = project_dir.is_some() && !project_already_suppressed;
+
+    if !had_profile && !had_paths && !project_active {
+        eprintln!("nothing is currently activated");
         return;
     }
-    match crate::core::shell::detect_shell().as_str() {
-        "cmd" => {
+
+    let is_cmd = crate::core::shell::detect_shell() == "cmd";
+
+    if had_profile || had_paths {
+        if is_cmd {
             println!("SET STACK_ACTIVE_PROFILE=");
             println!("SET STACK_ACTIVE_PROFILE_PATHS=");
-        }
-        _ => {
+        } else {
             println!("Remove-Item Env:\\STACK_ACTIVE_PROFILE -ErrorAction SilentlyContinue");
             println!("Remove-Item Env:\\STACK_ACTIVE_PROFILE_PATHS -ErrorAction SilentlyContinue");
         }
+    }
+
+    if project_active {
+        let dir = project_dir.expect("project_active implies project_dir is Some");
+        if is_cmd {
+            println!("SET STACK_PROJECT_DEACTIVATED={dir}");
+        } else {
+            println!("$env:STACK_PROJECT_DEACTIVATED = \"{dir}\"");
+        }
+        eprintln!("deactivated project at {dir} for this shell — run `stack activate` to reactivate it without leaving");
     }
 }
 

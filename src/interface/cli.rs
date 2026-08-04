@@ -173,8 +173,8 @@ enum Command {
     },
     /// Activate a project's environment in the current shell (called by the shell hook on every prompt)
     Activate {
-        /// Shell invoking this, e.g. "pwsh"
-        shell: String,
+        /// Shell invoking this, e.g. "pwsh" (called by the shell hook; omit to explicitly reactivate the current project without leaving its directory)
+        shell: Option<String>,
     },
     /// Install the shell hook and check dependencies
     Setup {
@@ -205,6 +205,17 @@ enum Command {
         /// The command to run, e.g. `-- npm run build`
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
+    },
+    /// Run a [script.<name>] entry from the current directory's stack.toml; omit name to list them
+    Run {
+        /// Name of the script to run
+        name: Option<String>,
+        /// Approve this script's commands without an interactive trust prompt
+        #[arg(long)]
+        yes: bool,
+        /// Extra arguments forwarded to the script's last step
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 }
 
@@ -288,7 +299,10 @@ pub fn run() {
         Command::Doctor { fix, project } => shell_integration::doctor(fix, project),
         Command::Hook { shell } => shell_integration::hook(&shell),
         Command::Activate { shell } => {
-            shell_integration::activate(&shell);
+            match shell {
+                Some(shell) => shell_integration::activate(&shell),
+                None => shell_integration::activate_explicit(),
+            }
             Ok(())
         }
         Command::Setup { shell, default_profile } => {
@@ -313,6 +327,7 @@ pub fn run() {
         }
         Command::Which { name } => profile::which(name),
         Command::Exec { with, command } => profile::exec_with(&with, &command),
+        Command::Run { name, yes, args } => lifecycle::run_script(name, &args, yes),
     };
 
     if let Err(e) = result {
