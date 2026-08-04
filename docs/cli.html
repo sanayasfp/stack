@@ -142,6 +142,16 @@
       </dl>
     </div>
 
+    <div class="cmd">
+      <h3><code>stack run [name] [-- args] [--yes]</code></h3>
+      <p>Runs a <code>[script.&lt;name&gt;]</code> entry's steps in the foreground, in order, stopping at the first step that fails with its exit code. Not a service — nothing is tracked, nothing keeps running after the last step exits.</p>
+      <dl class="flags">
+        <dt><code>name</code></dt><dd>Which script to run. Omit to list the scripts declared in the current directory's <code>stack.toml</code>.</dd>
+        <dt><code>-- args</code></dt><dd>Anything after <code>--</code> is forwarded to the script's last step only, e.g. <code>stack run test -- -k something</code>.</dd>
+        <dt><code>--yes</code></dt><dd>Approves this script's commands without the interactive trust prompt — same purpose as <code>stack up --yes</code>, for CI/scripted use.</dd>
+      </dl>
+    </div>
+
     <h2>Manifest editing</h2>
     <div class="cmd">
       <h3><code>stack add &lt;kind&gt; &lt;name&gt; [version] [options]</code></h3>
@@ -223,9 +233,12 @@
 
     <h2>Shell integration</h2>
     <div class="cmd">
-      <h3><code>stack setup [--shell]</code></h3>
+      <h3><code>stack setup [--shell] [--default-profile]</code></h3>
       <p>One-time bootstrap per machine: wires the shell hook into your profile and runs the equivalent of <code>doctor --fix</code>. Idempotent — safe to run again.</p>
-      <dl class="flags"><dt><code>--shell</code></dt><dd>Which shell's profile to wire (<code>pwsh</code>, <code>powershell</code>, or <code>cmd</code>). Auto-detected from the parent process if omitted, by walking up to 10 ancestor processes past wrapper processes like <code>conhost.exe</code>/Windows Terminal to find the actual shell that launched <code>stack setup</code> — the same technique <code>shellingham</code> (the reference implementation for this exact problem) uses, since there's no OS API that answers "what shell spawned me" directly.</dd></dl>
+      <dl class="flags">
+        <dt><code>--shell</code></dt><dd>Which shell's profile to wire (<code>pwsh</code>, <code>powershell</code>, or <code>cmd</code>). Auto-detected from the parent process if omitted, by walking up to 10 ancestor processes past wrapper processes like <code>conhost.exe</code>/Windows Terminal to find the actual shell that launched <code>stack setup</code> — the same technique <code>shellingham</code> (the reference implementation for this exact problem) uses, since there's no OS API that answers "what shell spawned me" directly.</dd>
+        <dt><code>--default-profile &lt;name&gt;</code></dt><dd>Makes a saved profile's languages/tools available to <em>every</em> new process on the machine — interactive or not — by writing their resolved paths directly into the persistent Windows user <code>PATH</code> (the registry), not a per-prompt shell variable. That's what makes it visible to non-interactive processes (scripts, CI runners, an AI agent's own tool calls) with zero dependency on the shell hook. Pass <code>none</code> to clear it. Already-open terminals/IDEs need restarting to pick up the change — standard PATH-caching behavior, not something stack can force from outside. See <a href="#profile">below</a>.</dd>
+      </dl>
     </div>
     <div class="cmd">
       <h3><code>stack hook &lt;shell&gt;</code></h3>
@@ -233,14 +246,96 @@
       <dl class="flags"><dt><code>shell</code></dt><dd>Required. Which shell to print the hook script for, e.g. <code>pwsh</code>.</dd></dl>
     </div>
     <div class="cmd">
-      <h3><code>stack activate &lt;shell&gt;</code></h3>
-      <p>Called by the hook on every prompt — resolves the current directory's <code>stack.toml</code> (if any) and prints the <code>PATH</code> changes for that shell to apply. Silent, no-op output when no manifest is found.</p>
-      <dl class="flags"><dt><code>shell</code></dt><dd>Required. Which shell is invoking this, e.g. <code>pwsh</code>.</dd></dl>
+      <h3><code>stack activate [shell]</code></h3>
+      <p>With a shell argument, this is called by the hook on every prompt — resolves the current directory's <code>stack.toml</code> (if any) and prints the <code>PATH</code> changes for that shell to apply. Silent, no-op output when no manifest is found, or when this project was explicitly deactivated (see <code>stack deactivate</code> below).</p>
+      <p>With no argument, it's an explicit command: reactivates the current directory's project if <code>stack deactivate</code> suppressed it, without needing to leave the directory. Detects your shell itself.</p>
+      <dl class="flags"><dt><code>shell</code></dt><dd>Which shell is invoking this, e.g. <code>pwsh</code>. Omit for the explicit-reactivate form.</dd></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack deactivate</code></h3>
+      <p>Clears an explicitly-activated profile (see <code>stack profile &lt;name&gt;</code> below), and/or suppresses the current directory's project activation (<code>PATH</code>, the <code>[stack]</code> prompt indicator) — whichever applies. One-way and idempotent: running it again while already deactivated just confirms there's nothing left to turn off, it doesn't toggle anything back on.</p>
+      <dl class="flags"><dt>No arguments or flags.</dt></dl>
+      <div class="why">
+        <strong>Why project deactivation self-clears</strong>
+        <p>Project activation is otherwise ambient — ordinarily, leaving the directory is what turns it off, with no separate on/off state to track. <code>stack deactivate</code> adds a way to suppress it <em>without</em> leaving (e.g. to briefly use a different tool version from the same terminal) — but it stays scoped to that one project directory: the moment you actually <code>cd</code> away, the suppression clears itself automatically, so a later visit reactivates normally. Use <code>stack activate</code> (no argument) to reactivate sooner, without leaving.</p>
+      </div>
     </div>
     <div class="cmd">
       <h3><code>stack load-env [path]</code></h3>
       <p>Loads a <code>.env</code>-style file into the current shell session. Confirms which variable names were loaded, never the values. <code>stack up</code>/<code>stack doctor --project</code> now do this automatically for a project's own <code>.env</code> — this command is for loading one manually, into your interactive shell, for anything you're running by hand.</p>
-      <dl class="flags"><dt><code>path</code></dt><dd>Path to the <code>.env</code> file; defaults to <code>.env</code> in the current directory.</dd></dl>
+      <dl class="flags"><dt><code>path</code></dt><dd>Path to the <code>.env</code> file. Omit to load the current directory's root <code>.env</code> plus any <code>[project].env_files</code> declared in its <code>stack.toml</code> — skipping whichever of those don't exist, erroring only if none do.</dd></dl>
+    </div>
+
+    <h2 id="profile">Profiles &amp; ad hoc execution</h2>
+    <p>Named, persisted language/tool version pins usable from <em>any</em> directory — not just inside a stack-managed project. A profile is stored under <code>~/.stack/profiles/&lt;name&gt;.toml</code>, reusing <code>stack.toml</code>'s own schema, restricted in practice to <code>[language.*]</code>/<code>[tool.*]</code>.</p>
+
+    <div class="cmd">
+      <h3><code>stack profile</code></h3>
+      <p>Interactive wizard, no arguments: pick languages (same checkbox flow as <code>stack new</code>), then choose to activate the result in this shell, save it under a name, or both.</p>
+      <dl class="flags"><dt>No arguments or flags.</dt></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack profile &lt;name&gt;</code></h3>
+      <p>Activates a saved profile in the current shell — its languages/tools go on <code>PATH</code>, re-resolved fresh on every prompt the same way project activation is.</p>
+      <dl class="flags"><dt><code>name</code></dt><dd>Required. Must be a profile already saved via the wizard or <code>stack profile add</code>.</dd></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack profile &lt;name&gt; --exec "&lt;command&gt;"</code></h3>
+      <p>Resolves a saved profile's pins (installing anything missing), runs a single one-off command with them on <code>PATH</code>, then exits with its status. Nothing persists — no activation, no shell state.</p>
+      <dl class="flags"><dt><code>--exec</code></dt><dd>Required for this form. The command string to run, e.g. <code>--exec "php artisan migrate"</code>.</dd></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack profile list</code></h3>
+      <p>Lists saved profiles, tagging the currently-active one and the configured default (see <code>stack setup --default-profile</code>).</p>
+      <dl class="flags"><dt>No arguments or flags.</dt></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack profile describe &lt;name&gt;</code></h3>
+      <p>Each pinned entry's version and real resolved/installed status — <code>kubectl describe</code>-style.</p>
+      <dl class="flags"><dt><code>name</code></dt><dd>Required.</dd></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack profile edit &lt;name&gt;</code></h3>
+      <p>Opens a saved profile's TOML file in <code>$VISUAL</code>/<code>$EDITOR</code>, falling back to <code>notepad.exe</code>. If the profile you're editing is the current default (<code>stack setup --default-profile</code>), the persistent <code>PATH</code> is refreshed automatically afterward so it can't silently drift stale.</p>
+      <dl class="flags"><dt><code>name</code></dt><dd>Required.</dd></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack profile add &lt;name&gt; &lt;language|tool&gt; &lt;entry&gt; [version] [options]</code></h3>
+      <p>Structured modification of a saved profile — same underlying logic as <code>stack add</code> for <code>stack.toml</code>, same format-preserving guarantee, same default-profile auto-refresh as <code>edit</code> above.</p>
+      <dl class="flags">
+        <dt><code>name</code></dt><dd>Required. The profile to modify.</dd>
+        <dt><code>language|tool</code></dt><dd>Required. A profile has no <code>[service.*]</code>/<code>[run]</code>/<code>[[clone]]</code> — only these two kinds apply.</dd>
+        <dt><code>entry</code></dt><dd>Required. The name being added, e.g. <code>php</code>.</dd>
+        <dt><code>version</code>, <code>--path</code>, <code>--manager</code>, <code>--plugin</code>, <code>--binary</code></dt><dd>Same meaning as the matching <code>stack add</code> flags.</dd>
+      </dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack profile remove &lt;name&gt; &lt;language|tool&gt; &lt;entry&gt;</code></h3>
+      <p>Removes one entry from a saved profile.</p>
+      <dl class="flags"><dt>All three arguments required.</dt></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack profile rm &lt;name&gt;</code></h3>
+      <p>Deletes a saved profile entirely. If it was the current default, the default is cleared and its <code>PATH</code> entries removed too.</p>
+      <dl class="flags"><dt><code>name</code></dt><dd>Required.</dd></dl>
+    </div>
+    <div class="cmd">
+      <h3><code>stack which [name]</code></h3>
+      <p>Shows what stack would resolve a language/tool to right now, and why.</p>
+      <dl class="flags"><dt><code>name</code></dt><dd>A language or tool name to resolve, e.g. <code>php</code>. Omit to summarize the whole active context instead: current project (if any), and active/default profile.</dd></dl>
+      <p style="font-size:13px;opacity:0.75;">Resolution order for a named lookup: the current directory's project, if it pins that name; else an explicitly-activated profile; else a profile literally named <code>default</code>, if one exists — a reserved fallback name, distinct from <code>stack setup --default-profile</code>.</p>
+    </div>
+    <div class="cmd">
+      <h3><code>stack exec --with &lt;name@version,...&gt; -- &lt;command&gt;</code></h3>
+      <p>Ephemeral ad hoc version pins with no named profile at all — resolves each pin (installing anything missing), runs the command with them on <code>PATH</code>, exits with its status.</p>
+      <dl class="flags">
+        <dt><code>--with</code></dt><dd>Required. Comma-separated <code>name@version</code> pairs, e.g. <code>--with php@8.3.1,node@20</code>.</dd>
+        <dt><code>-- command</code></dt><dd>Required. Everything after <code>--</code> is the command and its arguments.</dd>
+      </dl>
+      <div class="why">
+        <strong>Why this exists alongside profiles</strong>
+        <p>Both <code>stack exec</code> and <code>stack profile &lt;name&gt; --exec</code> share the same real motivation: a non-interactive process — an AI agent's own shell tool calls, a CI step, a one-off script — never sees any of stack's ambient <code>PATH</code> machinery, since that all lives inside the interactive shell's per-prompt hook, which simply never runs for a one-shot, non-interactive invocation. These two commands are the actual working answer for that case: stateless, no dependency on any shell hook or prior <code>cd</code>.</p>
+      </div>
     </div>
 
     <nav class="docs-pager">

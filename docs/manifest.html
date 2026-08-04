@@ -66,6 +66,7 @@
       <tbody>
         <tr><td>name</td><td>string</td><td><span class="default-tag">folder name</span></td><td>Used to key <code>stack status</code>/<code>stack logs</code>/<code>stack down</code> and as the default domain prefix.</td></tr>
         <tr><td>domain</td><td>string</td><td><span class="default-tag">{name}.localhost</span></td><td><code>.localhost</code> resolves with zero setup in Chrome/Firefox/Edge — no hosts-file edit. Non-browser clients (curl, backend-to-backend calls) fall back to <code>127.0.0.1:&lt;port&gt;</code>.</td></tr>
+        <tr><td>env_files</td><td>array of strings</td><td><span class="default-tag">[]</span></td><td>Extra <code>.env</code> paths, relative to the project root, loaded in addition to a root-level <code>.env</code> (if present) by <code>stack up</code>, <code>stack doctor --project</code>, and <code>stack load-env</code> when it's called with no explicit path. For a project whose real <code>.env</code> lives somewhere other than the project root.</td></tr>
       </tbody>
     </table>
     </div>
@@ -73,7 +74,8 @@
       <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">stack.toml</span></div>
       <pre class="term-body">[project]
 name = "acme-api"
-domain = "acme-api.localhost"</pre>
+domain = "acme-api.localhost"
+env_files = ["backend/.env"]   # optional — root .env still loads too, if present</pre>
     </div>
 
     <h2 id="clone">[[clone]]</h2>
@@ -126,6 +128,7 @@ manager = "vfox"</pre>
         <tr><td>binary</td><td>string</td><td><span class="default-tag">{name}.exe</span></td><td>Binary filename override.</td></tr>
         <tr><td>path</td><td>string</td><td>—</td><td>BYO — a fixed, already-resolved binary. Bypasses vfox/uv entirely.</td></tr>
         <tr><td>workers</td><td>number</td><td><span class="default-tag">4</span></td><td>PHP only. Sets <code>PHP_FCGI_CHILDREN</code> for stack's default FastCGI execution (see <a href="#run-php-default">below</a>) — how many concurrent <code>php-cgi</code> worker processes handle requests for this project. Raise it for a project doing real concurrent local load-testing; the default of 4 is plenty for normal day-to-day browsing.</td></tr>
+        <tr><td>venv</td><td>string</td><td>—</td><td>Python only, in practice. A virtualenv directory, relative to the project root — its <code>Scripts</code> (Windows) folder is added to <code>PATH</code> during activation, right alongside the interpreter itself. Replaces a manual <code>.venv\Scripts\activate</code> step: every console-script your venv installed (<code>pytest</code>, <code>black</code>, a Django <code>manage.py</code>-adjacent tool, ...) just resolves once you <code>cd</code> in, the same as everything else stack manages.</td></tr>
       </tbody>
     </table>
     </div>
@@ -191,6 +194,31 @@ port = 8000</pre>
       </tbody>
     </table>
     </div>
+
+    <h2 id="script">[script.&lt;name&gt;]</h2>
+    <p>Named, project-scoped commands — migrations, tests, seed scripts — run via <code>stack run &lt;name&gt;</code> in the foreground, not started/stopped like <code>[run]</code>/<code>[service.*]</code>. Gets the same resolved language <code>PATH</code> (and <code>venv</code>, if declared) as <code>stack up</code>, so a step can just call <code>python</code>/<code>pytest</code>/etc. directly.</p>
+    <div class="table-wrap">
+    <table class="table field-table">
+      <thead><tr><th>Field</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>command</td><td>string or array of strings</td><td><em>required</em></td><td>A single command, a TOML array of steps, or a multi-line string (one step per line) — run in order, stopping at the first step that exits non-zero, with that step's exit code. <code>stack run &lt;name&gt; -- extra args</code> forwards trailing arguments to the last step only.</td></tr>
+        <tr><td>cwd</td><td>string</td><td><span class="default-tag">project root</span></td><td>Same meaning as <code>[run].cwd</code>.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="blueprint term">
+      <div class="term-bar"><span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span><span class="term-name">stack.toml</span></div>
+      <pre class="term-body">[script.migrate]
+command = "python manage.py migrate"   # single step
+
+[script.reset-db]
+command = [                              # multiple steps, array form
+  "python manage.py flush --no-input",
+  "python manage.py migrate",
+  "python manage.py loaddata fixtures/dev.json",
+]</pre>
+    </div>
+    <p style="font-size:13px;opacity:0.75;">Like <code>[run]</code>/<code>[service.*].command</code>, a script's commands go through trust-on-first-use before they can execute — checked lazily, only when that specific script is actually run via <code>stack run</code>, not bundled into <code>stack up</code>'s check. See the <a href="cli.html">CLI Reference</a>'s <code>stack run</code> entry.</p>
 
     <h2 id="placeholders">Placeholders</h2>
     <p>Any <code>{VAR_NAME}</code> inside a <code>command</code> string resolves in order: reserved keywords (<code>{port}</code>, <code>{data_dir}</code>, <code>{path}</code>) first, then the process environment (including a project's own <code>.env</code>, loaded automatically before resolution), then — only with <code>stack up --prompt</code> — an interactive prompt, masked for anything that looks like a secret. Nothing left unresolved fails silently: every unresolved name is reported together, not one at a time.</p>
