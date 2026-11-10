@@ -2,7 +2,11 @@ use crate::core::commands::{lifecycle, profile, registry_commands, scaffold, she
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "stack", version, about = "Native, zero-container multi-project dev environment manager. No Docker, no VMs.")]
+#[command(
+    name = "stack",
+    version,
+    about = "Native, zero-container multi-project dev environment manager. No Docker, no VMs."
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -270,12 +274,34 @@ pub fn run() {
     let result: anyhow::Result<()> = match cli.command {
         Command::New { target } => scaffold::new_project(&target),
         Command::Init => scaffold::init(),
-        Command::Add { kind, name, version, schema, port, command, path, manager, plugin, binary } => {
-            scaffold::add(&kind, &name, version, schema, port, command, path, manager, plugin, binary)
-        }
+        Command::Add {
+            kind,
+            name,
+            version,
+            schema,
+            port,
+            command,
+            path,
+            manager,
+            plugin,
+            binary,
+        } => scaffold::add(
+            &kind, &name, version, schema, port, command, path, manager, plugin, binary,
+        ),
         Command::Remove { kind, name } => scaffold::remove(&kind, &name),
-        Command::Register { kind, name, version, path, external, port } => registry_commands::register(&kind, &name, &version, path.as_deref(), external, port),
-        Command::Unregister { kind, name, version } => registry_commands::unregister(&kind, &name, &version),
+        Command::Register {
+            kind,
+            name,
+            version,
+            path,
+            external,
+            port,
+        } => registry_commands::register(&kind, &name, &version, path.as_deref(), external, port),
+        Command::Unregister {
+            kind,
+            name,
+            version,
+        } => registry_commands::unregister(&kind, &name, &version),
         Command::List => {
             registry_commands::list();
             Ok(())
@@ -283,7 +309,12 @@ pub fn run() {
         Command::Prune { yes, purge_data } => registry_commands::prune(yes, purge_data),
         Command::Clean => registry_commands::clean(),
         Command::LoadEnv { path } => shell_integration::load_env(path),
-        Command::Up { target, prompt, clone, yes } => lifecycle::up(&target, prompt, clone, yes),
+        Command::Up {
+            target,
+            prompt,
+            clone,
+            yes,
+        } => lifecycle::up(&target, prompt, clone, yes),
         Command::Down { project, all } => lifecycle::down(project, all),
         Command::Restart { project, all, yes } => lifecycle::restart(project, all, yes),
         Command::Describe { name } => lifecycle::describe(name),
@@ -305,7 +336,10 @@ pub fn run() {
             }
             Ok(())
         }
-        Command::Setup { shell, default_profile } => {
+        Command::Setup {
+            shell,
+            default_profile,
+        } => {
             let shell = shell.unwrap_or_else(crate::core::shell::detect_shell);
             shell_integration::setup(&shell, default_profile.as_deref())
         }
@@ -315,10 +349,30 @@ pub fn run() {
             Some(ProfileAction::Describe { name }) => profile::describe(&name),
             Some(ProfileAction::Edit { name }) => profile::edit(&name),
             Some(ProfileAction::Rm { name }) => profile::rm(&name),
-            Some(ProfileAction::Add { name, kind, entry_name, version, path, manager, plugin, binary }) => {
-                profile::add(&name, &kind, &entry_name, version, path, manager, plugin, binary)
-            }
-            Some(ProfileAction::Remove { name, kind, entry_name }) => profile::remove(&name, &kind, &entry_name),
+            Some(ProfileAction::Add {
+                name,
+                kind,
+                entry_name,
+                version,
+                path,
+                manager,
+                plugin,
+                binary,
+            }) => profile::add(
+                &name,
+                &kind,
+                &entry_name,
+                version,
+                path,
+                manager,
+                plugin,
+                binary,
+            ),
+            Some(ProfileAction::Remove {
+                name,
+                kind,
+                entry_name,
+            }) => profile::remove(&name, &kind, &entry_name),
             Some(ProfileAction::Activate(raw_args)) => profile::activate_or_exec(&raw_args),
         },
         Command::Deactivate => {

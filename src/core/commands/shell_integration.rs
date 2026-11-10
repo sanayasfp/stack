@@ -1,4 +1,3 @@
-use anyhow::{Context, Result, anyhow, bail};
 use crate::core::caddy;
 use crate::core::commands::lifecycle::{auto_load_dotenv, port_in_use};
 use crate::core::commands::shared::resolve_tool;
@@ -7,13 +6,19 @@ use crate::core::manifest::{self, Manifest};
 use crate::core::registry::Registry;
 use crate::core::{placeholder, style, toolchain};
 use crate::platform;
+use anyhow::{Context, Result, anyhow, bail};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 fn check_on_path(name: &str) -> Result<String> {
     match std::process::Command::new(name).arg("--version").output() {
         Ok(output) => {
-            let stdout_line = String::from_utf8_lossy(&output.stdout).lines().next().unwrap_or("").trim().to_string();
+            let stdout_line = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string();
             if stdout_line.is_empty() {
                 let stderr_line = String::from_utf8_lossy(&output.stderr)
                     .lines()
@@ -31,7 +36,11 @@ fn check_on_path(name: &str) -> Result<String> {
     }
 }
 
-const KNOWN_SERVICE_PATTERNS: &[(&str, &str, u16)] = &[("MySQL*", "mysql", 3306), ("MongoDB*", "mongo", 27017), ("postgresql*", "postgres", 5432)];
+const KNOWN_SERVICE_PATTERNS: &[(&str, &str, u16)] = &[
+    ("MySQL*", "mysql", 3306),
+    ("MongoDB*", "mongo", 27017),
+    ("postgresql*", "postgres", 5432),
+];
 
 fn match_known_service(name: &str) -> Option<(&'static str, u16)> {
     let lower = name.to_lowercase();
@@ -43,13 +52,26 @@ fn match_known_service(name: &str) -> Option<(&'static str, u16)> {
 
 #[cfg(windows)]
 fn scan_windows_services() {
-    let quoted_patterns = KNOWN_SERVICE_PATTERNS.iter().map(|(pattern, _, _)| format!("'{pattern}'")).collect::<Vec<_>>().join(",");
-    let script =
-        format!("Get-Service -Name {quoted_patterns} -ErrorAction SilentlyContinue | Where-Object {{ $_.Status -eq 'Running' }} | Select-Object -ExpandProperty Name");
-    let Ok(output) = std::process::Command::new("powershell").args(["-NoProfile", "-Command", &script]).output() else {
+    let quoted_patterns = KNOWN_SERVICE_PATTERNS
+        .iter()
+        .map(|(pattern, _, _)| format!("'{pattern}'"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let script = format!(
+        "Get-Service -Name {quoted_patterns} -ErrorAction SilentlyContinue | Where-Object {{ $_.Status -eq 'Running' }} | Select-Object -ExpandProperty Name"
+    );
+    let Ok(output) = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-Command", &script])
+        .output()
+    else {
         return;
     };
-    let names: Vec<&str> = std::str::from_utf8(&output.stdout).unwrap_or("").lines().map(str::trim).filter(|l| !l.is_empty()).collect();
+    let names: Vec<&str> = std::str::from_utf8(&output.stdout)
+        .unwrap_or("")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
     if names.is_empty() {
         return;
     }
@@ -57,7 +79,9 @@ fn scan_windows_services() {
     println!("found running Windows Services matching known database engines:");
     for name in names {
         if let Some((engine, port)) = match_known_service(name) {
-            println!("  '{name}' — if this is the {engine} instance you want stack to use, add `external = true` to [service.{engine}] in stack.toml (conventionally port {port}, adjust if yours differs)");
+            println!(
+                "  '{name}' — if this is the {engine} instance you want stack to use, add `external = true` to [service.{engine}] in stack.toml (conventionally port {port}, adjust if yours differs)"
+            );
         }
     }
 }
@@ -66,43 +90,79 @@ fn scan_windows_services() {
 /// path registered, placeholders resolvable) without starting anything.
 fn doctor_service(engine: &str, svc: &crate::core::manifest::Service) -> bool {
     if let Err(e) = svc.validate(engine) {
-        println!("  service.{engine}: {}", style::err(&format!("INVALID ({e:#})")));
+        println!(
+            "  service.{engine}: {}",
+            style::err(&format!("INVALID ({e:#})"))
+        );
         return false;
     }
 
-    let registry_external_port =
-        if svc.path.is_none() && !svc.external { Registry::load().lookup("service", engine, &svc.version).filter(|e| e.external).and_then(|e| e.port) } else { None };
+    let registry_external_port = if svc.path.is_none() && !svc.external {
+        Registry::load()
+            .lookup("service", engine, &svc.version)
+            .filter(|e| e.external)
+            .and_then(|e| e.port)
+    } else {
+        None
+    };
     let is_external = svc.external || registry_external_port.is_some();
 
     if is_external {
-        let port = svc.resolve_port(engine, false).ok().flatten().or(registry_external_port).or_else(|| manifest::conventional_port(engine));
+        let port = svc
+            .resolve_port(engine, false)
+            .ok()
+            .flatten()
+            .or(registry_external_port)
+            .or_else(|| manifest::conventional_port(engine));
         match port {
             Some(port) if port_in_use(port) => {
-                println!("  service.{engine}: {}", style::ok(&format!("OK (external, listening on {port})")));
+                println!(
+                    "  service.{engine}: {}",
+                    style::ok(&format!("OK (external, listening on {port})"))
+                );
                 true
             }
             Some(port) => {
-                println!("  service.{engine}: {}", style::err(&format!("nothing listening on {port} (marked external)")));
+                println!(
+                    "  service.{engine}: {}",
+                    style::err(&format!("nothing listening on {port} (marked external)"))
+                );
                 false
             }
             None => {
-                println!("  service.{engine}: {}", style::err("external, but no port resolvable — set [service.{engine}].port"));
+                println!(
+                    "  service.{engine}: {}",
+                    style::err("external, but no port resolvable — set [service.{engine}].port")
+                );
                 false
             }
         }
     } else {
-        let has_path = svc.path.is_some() || Registry::load().lookup("service", engine, &svc.version).and_then(|e| e.path.clone()).is_some();
+        let has_path = svc.path.is_some()
+            || Registry::load()
+                .lookup("service", engine, &svc.version)
+                .and_then(|e| e.path.clone())
+                .is_some();
         let path_ok = if has_path {
             println!("  service.{engine}: {}", style::ok("OK (managed)"));
             true
         } else {
-            println!("  service.{engine}: {}", style::err(&format!("no path registered — run `stack register service {engine} {} <path>`", svc.version)));
+            println!(
+                "  service.{engine}: {}",
+                style::err(&format!(
+                    "no path registered — run `stack register service {engine} {} <path>`",
+                    svc.version
+                ))
+            );
             false
         };
         let port_ok = match svc.resolve_port(engine, false) {
             Ok(_) => true,
             Err(e) => {
-                println!("  service.{engine}: {}", style::err(&format!("port placeholder unresolved ({e:#})")));
+                println!(
+                    "  service.{engine}: {}",
+                    style::err(&format!("port placeholder unresolved ({e:#})"))
+                );
                 false
             }
         };
@@ -120,28 +180,43 @@ fn doctor_run(run: &crate::core::manifest::Run, has_php: bool) -> bool {
     if run.external {
         match run.resolve_port(false) {
             Ok(Some(port)) if port_in_use(port) => {
-                println!("  [run]: {}", style::ok(&format!("OK (external, listening on {port})")));
+                println!(
+                    "  [run]: {}",
+                    style::ok(&format!("OK (external, listening on {port})"))
+                );
                 true
             }
             Ok(Some(port)) => {
-                println!("  [run]: {}", style::err(&format!("nothing listening on {port} (marked external)")));
+                println!(
+                    "  [run]: {}",
+                    style::err(&format!("nothing listening on {port} (marked external)"))
+                );
                 false
             }
             Ok(None) => true,
             Err(e) => {
-                println!("  [run]: {}", style::err(&format!("port unresolved ({e:#})")));
+                println!(
+                    "  [run]: {}",
+                    style::err(&format!("port unresolved ({e:#})"))
+                );
                 false
             }
         }
     } else {
         let port_ok = match run.resolve_port(false) {
             Ok(Some(port)) if port_in_use(port) => {
-                println!("  [run]: {}", style::err(&format!("port {port} already in use")));
+                println!(
+                    "  [run]: {}",
+                    style::err(&format!("port {port} already in use"))
+                );
                 false
             }
             Ok(_) => true,
             Err(e) => {
-                println!("  [run]: {}", style::err(&format!("port unresolved ({e:#})")));
+                println!(
+                    "  [run]: {}",
+                    style::err(&format!("port unresolved ({e:#})"))
+                );
                 false
             }
         };
@@ -152,7 +227,13 @@ fn doctor_run(run: &crate::core::manifest::Run, has_php: bool) -> bool {
                 match placeholder::resolve(command, &reserved, false) {
                     Ok(_) => true,
                     Err(missing) => {
-                        println!("  [run]: {}", style::err(&format!("command has unresolved placeholder(s): {}", missing.join(", "))));
+                        println!(
+                            "  [run]: {}",
+                            style::err(&format!(
+                                "command has unresolved placeholder(s): {}",
+                                missing.join(", ")
+                            ))
+                        );
                         false
                     }
                 }
@@ -164,8 +245,8 @@ fn doctor_run(run: &crate::core::manifest::Run, has_php: bool) -> bool {
 }
 
 fn doctor_project() -> Result<()> {
-    let (path, manifest) =
-        Manifest::find_and_load(&PathBuf::from(".")).context("stack doctor --project: no stack.toml found in this directory or any parent")?;
+    let (path, manifest) = Manifest::find_and_load(&PathBuf::from("."))
+        .context("stack doctor --project: no stack.toml found in this directory or any parent")?;
     println!("checking {}...", path.display());
     let project_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
     auto_load_dotenv(&project_dir, &manifest.project.env_files);
@@ -174,14 +255,21 @@ fn doctor_project() -> Result<()> {
     for (name, entry) in &manifest.language {
         match toolchain::lookup(name, entry) {
             Some(bin) => println!("  language.{name}: {} ({})", style::ok("OK"), bin.display()),
-            None => println!("  language.{name}: {}", style::warn("not installed yet (will be installed on `stack up`)")),
+            None => println!(
+                "  language.{name}: {}",
+                style::warn("not installed yet (will be installed on `stack up`)")
+            ),
         }
         if let Some(venv) = entry.venv() {
             let venv_dir = crate::core::commands::shared::venv_bin_dir(&project_dir, venv);
             if venv_dir.is_dir() {
                 println!("    venv: {} ({})", venv, style::ok("OK"));
             } else {
-                println!("    venv: {} ({})", venv, style::err(&format!("not found at {}", venv_dir.display())));
+                println!(
+                    "    venv: {} ({})",
+                    venv,
+                    style::err(&format!("not found at {}", venv_dir.display()))
+                );
             }
         }
     }
@@ -194,7 +282,11 @@ fn doctor_project() -> Result<()> {
         all_ok &= doctor_run(run, manifest.language.contains_key("php"));
     }
 
-    if all_ok { Ok(()) } else { Err(anyhow!("one or more project checks failed")) }
+    if all_ok {
+        Ok(())
+    } else {
+        Err(anyhow!("one or more project checks failed"))
+    }
 }
 
 pub fn doctor(fix: bool, project: bool) -> Result<()> {
@@ -212,19 +304,27 @@ pub fn doctor(fix: bool, project: bool) -> Result<()> {
                 if let Some(pinned) = crate::core::pinned::pinned_version(tool)
                     && !version.contains(pinned)
                 {
-                    println!("    {}", style::warn(&format!("warning: stack was tested against {tool} {pinned}; installed version may behave differently")));
+                    println!(
+                        "    {}",
+                        style::warn(&format!(
+                            "warning: stack was tested against {tool} {pinned}; installed version may behave differently"
+                        ))
+                    );
                 }
             }
             Err(e) => {
                 println!("  {tool}: {} ({e:#})", style::err("MISSING"));
                 all_ok = false;
                 if fix {
-                    let pinned =
-                        crate::core::pinned::pinned_version(tool).ok_or_else(|| anyhow!("no pinned version known for '{tool}'"))?;
+                    let pinned = crate::core::pinned::pinned_version(tool)
+                        .ok_or_else(|| anyhow!("no pinned version known for '{tool}'"))?;
                     println!("  installing {tool}@{pinned}...");
                     match platform::install_pinned(tool, pinned) {
                         Ok(()) => println!("  {tool}: {}", style::ok("installed")),
-                        Err(e) => println!("  {tool}: {}", style::err(&format!("install failed: {e:#}"))),
+                        Err(e) => println!(
+                            "  {tool}: {}",
+                            style::err(&format!("install failed: {e:#}"))
+                        ),
                     }
                 }
             }
@@ -233,8 +333,14 @@ pub fn doctor(fix: bool, project: bool) -> Result<()> {
 
     if fix {
         match caddy::trust() {
-            Ok(()) => println!("  caddy: {}", style::ok("local CA trusted (https://*.localhost works with no browser warning)")),
-            Err(e) => println!("  caddy: {}", style::warn(&format!("could not trust local CA: {e:#}"))),
+            Ok(()) => println!(
+                "  caddy: {}",
+                style::ok("local CA trusted (https://*.localhost works with no browser warning)")
+            ),
+            Err(e) => println!(
+                "  caddy: {}",
+                style::warn(&format!("could not trust local CA: {e:#}"))
+            ),
         }
     }
 
@@ -254,7 +360,11 @@ pub fn doctor(fix: bool, project: bool) -> Result<()> {
                 }
             }
         }
-        let byo_languages: Vec<_> = manifest.language.iter().filter(|(_, entry)| entry.path().is_some()).collect();
+        let byo_languages: Vec<_> = manifest
+            .language
+            .iter()
+            .filter(|(_, entry)| entry.path().is_some())
+            .collect();
         if !byo_languages.is_empty() {
             println!("languages with a BYO path declared in {}:", path.display());
             for (name, entry) in byo_languages {
@@ -269,14 +379,16 @@ pub fn doctor(fix: bool, project: bool) -> Result<()> {
         }
     }
 
-    if project
-        && let Err(e) = doctor_project()
-    {
+    if project && let Err(e) = doctor_project() {
         println!("  {e:#}");
         all_ok = false;
     }
 
-    if all_ok { Ok(()) } else { Err(anyhow!("one or more checks failed")) }
+    if all_ok {
+        Ok(())
+    } else {
+        Err(anyhow!("one or more checks failed"))
+    }
 }
 
 pub fn setup(shell: &str, default_profile: Option<&str>) -> Result<()> {
@@ -294,18 +406,28 @@ pub fn setup(shell: &str, default_profile: Option<&str>) -> Result<()> {
     if let Some(name) = default_profile {
         if name.eq_ignore_ascii_case("none") {
             crate::core::commands::profile::set_default_profile(None)?;
-            println!("cleared the default profile — restart any already-open terminals to drop it from their PATH");
+            println!(
+                "cleared the default profile — restart any already-open terminals to drop it from their PATH"
+            );
         } else {
             crate::core::commands::profile::set_default_profile(Some(name))?;
-            println!("'{name}' is now on PATH for every new terminal/process (run `stack setup --default-profile none` to undo)");
-            println!("note: already-open terminals/IDEs won't see this until restarted — Windows caches PATH per-process");
+            println!(
+                "'{name}' is now on PATH for every new terminal/process (run `stack setup --default-profile none` to undo)"
+            );
+            println!(
+                "note: already-open terminals/IDEs won't see this until restarted — Windows caches PATH per-process"
+            );
         }
     }
 
     #[cfg(windows)]
-    println!("tip: for curl/Postman/non-browser clients to also resolve *.localhost, consider Acrylic DNS Proxy (optional, one-time, needs admin rights)");
+    println!(
+        "tip: for curl/Postman/non-browser clients to also resolve *.localhost, consider Acrylic DNS Proxy (optional, one-time, needs admin rights)"
+    );
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    println!("tip: for curl/Postman/non-browser clients to also resolve *.localhost, consider Dnsmasq (optional, one-time, needs admin rights)");
+    println!(
+        "tip: for curl/Postman/non-browser clients to also resolve *.localhost, consider Dnsmasq (optional, one-time, needs admin rights)"
+    );
 
     Ok(())
 }
@@ -343,7 +465,11 @@ pub fn activate_explicit() {
         eprintln!("not inside a stack-managed directory");
         return;
     };
-    let dir = manifest_path.parent().unwrap_or(Path::new(".")).display().to_string();
+    let dir = manifest_path
+        .parent()
+        .unwrap_or(Path::new("."))
+        .display()
+        .to_string();
 
     if std::env::var("STACK_PROJECT_DEACTIVATED").ok().as_deref() == Some(dir.as_str()) {
         clear_project_deactivated_flag(&shell);
@@ -359,10 +485,15 @@ pub fn activate_explicit() {
 
 pub fn activate(shell: &str) {
     let project = Manifest::find_and_load(&PathBuf::from(".")).ok();
-    let project_dir_str = project.as_ref().and_then(|(p, _)| p.parent()).map(|d| d.display().to_string());
+    let project_dir_str = project
+        .as_ref()
+        .and_then(|(p, _)| p.parent())
+        .map(|d| d.display().to_string());
 
     let deactivated_dir = std::env::var("STACK_PROJECT_DEACTIVATED").ok();
-    let suppressed = deactivated_dir.as_deref().is_some_and(|d| Some(d) == project_dir_str.as_deref());
+    let suppressed = deactivated_dir
+        .as_deref()
+        .is_some_and(|d| Some(d) == project_dir_str.as_deref());
     if deactivated_dir.is_some() && !suppressed {
         clear_project_deactivated_flag(shell);
     }
@@ -382,7 +513,10 @@ pub fn activate(shell: &str) {
                 }
             }
             if let Some(venv) = entry.venv() {
-                dirs.push(crate::core::commands::shared::venv_bin_dir(project_dir, venv));
+                dirs.push(crate::core::commands::shared::venv_bin_dir(
+                    project_dir,
+                    venv,
+                ));
             }
         }
     }
@@ -393,7 +527,14 @@ pub fn activate(shell: &str) {
     }
 
     let composer_shadow = php_binary.as_ref().and_then(|php| {
-        project.as_ref().and_then(|(_, m)| m.tool.get("composer")).and_then(|tool| resolve_tool("composer", tool, false).ok().map(|phar| (php.clone(), phar)))
+        project
+            .as_ref()
+            .and_then(|(_, m)| m.tool.get("composer"))
+            .and_then(|tool| {
+                resolve_tool("composer", tool, false)
+                    .ok()
+                    .map(|phar| (php.clone(), phar))
+            })
     });
     match &composer_shadow {
         Some((php, phar)) => apply_composer_shadow(shell, php, phar),
@@ -405,7 +546,9 @@ pub fn activate(shell: &str) {
         return;
     }
 
-    let joined = std::env::join_paths(dirs).map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let joined = std::env::join_paths(dirs)
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
     match shell {
         "pwsh" | "powershell" => println!("$env:PATH = \"{joined};\" + $env:PATH"),
         "cmd" => {
@@ -424,7 +567,9 @@ fn print_active_indicator(shell: &str) {
         "cmd" => {
             let prefix = format!("\x1b[38;2;{r};{g};{b}m[stack]\x1b[0m ");
             let current = std::env::var("PROMPT").unwrap_or_else(|_| "$P$G".to_string());
-            let base = current.strip_prefix(prefix.as_str()).unwrap_or(current.as_str());
+            let base = current
+                .strip_prefix(prefix.as_str())
+                .unwrap_or(current.as_str());
             println!("SET PROMPT={prefix}{base}");
         }
         _ => {}
@@ -437,7 +582,11 @@ fn apply_composer_shadow(shell: &str, php: &Path, phar: &Path) {
             // global: required — this runs inside the wrapper's `prompt` function, where a
             // plain `function composer {...}` would be scoped local and vanish when it returns.
             let escape_pwsh_single_quoted = |p: &Path| p.display().to_string().replace('\'', "''");
-            println!("function global:composer {{ & '{}' '{}' @args }}", escape_pwsh_single_quoted(php), escape_pwsh_single_quoted(phar));
+            println!(
+                "function global:composer {{ & '{}' '{}' @args }}",
+                escape_pwsh_single_quoted(php),
+                escape_pwsh_single_quoted(phar)
+            );
         }
         "cmd" => {
             if let Err(e) = write_cmd_composer_bat(php, phar) {
@@ -454,7 +603,11 @@ fn cmd_composer_bat_path() -> Result<PathBuf> {
 
 fn write_cmd_composer_bat(php: &Path, phar: &Path) -> Result<()> {
     let path = cmd_composer_bat_path()?;
-    let content = format!("@echo off\r\n\"{}\" \"{}\" %*\r\n", php.display(), phar.display());
+    let content = format!(
+        "@echo off\r\n\"{}\" \"{}\" %*\r\n",
+        php.display(),
+        phar.display()
+    );
     std::fs::write(&path, content).with_context(|| format!("failed to write {}", path.display()))
 }
 
@@ -469,11 +622,15 @@ fn clear_cmd_composer_shadow() {
 /// Order matters: backtick must be escaped before `$`, or the fresh backtick that
 /// escaping `$` introduces would itself get escaped a second time.
 fn escape_pwsh_double_quoted(value: &str) -> String {
-    value.replace('`', "``").replace('$', "`$").replace('"', "`\"")
+    value
+        .replace('`', "``")
+        .replace('$', "`$")
+        .replace('"', "`\"")
 }
 
 fn load_env_file(path: &Path) -> Result<()> {
-    let iter = dotenvy::from_path_iter(path).with_context(|| format!("failed to open {}", path.display()))?;
+    let iter = dotenvy::from_path_iter(path)
+        .with_context(|| format!("failed to open {}", path.display()))?;
 
     let mut names = Vec::new();
     for item in iter {
@@ -499,13 +656,29 @@ pub fn load_env(path: Option<String>) -> Result<()> {
 
     let mut candidates = vec![PathBuf::from(".env")];
     if let Ok((manifest_path, manifest)) = Manifest::find_and_load(&PathBuf::from(".")) {
-        let project_dir = manifest_path.parent().unwrap_or(Path::new(".")).to_path_buf();
-        candidates.extend(manifest.project.env_files.iter().map(|f| project_dir.join(f)));
+        let project_dir = manifest_path
+            .parent()
+            .unwrap_or(Path::new("."))
+            .to_path_buf();
+        candidates.extend(
+            manifest
+                .project
+                .env_files
+                .iter()
+                .map(|f| project_dir.join(f)),
+        );
     }
 
     let existing: Vec<PathBuf> = candidates.iter().filter(|p| p.is_file()).cloned().collect();
     if existing.is_empty() {
-        bail!("no .env file found (checked {})", candidates.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", "));
+        bail!(
+            "no .env file found (checked {})",
+            candidates
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
     for p in existing {
         load_env_file(&p)?;
@@ -522,7 +695,10 @@ mod tests {
         assert_eq!(match_known_service("MySQL80"), Some(("mysql", 3306)));
         assert_eq!(match_known_service("mysql"), Some(("mysql", 3306)));
         assert_eq!(match_known_service("MongoDBR2"), Some(("mongo", 27017)));
-        assert_eq!(match_known_service("postgresql-x64-16"), Some(("postgres", 5432)));
+        assert_eq!(
+            match_known_service("postgresql-x64-16"),
+            Some(("postgres", 5432))
+        );
     }
 
     #[test]
@@ -540,7 +716,10 @@ mod tests {
 
     #[test]
     fn escape_pwsh_double_quoted_is_noop_for_plain_text() {
-        assert_eq!(escape_pwsh_double_quoted("plain-value-123"), "plain-value-123");
+        assert_eq!(
+            escape_pwsh_double_quoted("plain-value-123"),
+            "plain-value-123"
+        );
     }
 
     #[test]
@@ -548,15 +727,22 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("stack-load-env-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let env_path = dir.join(".env");
-        std::fs::write(&env_path, "# a full-line comment\n\nPLAIN=value1\nQUOTED=\"value with spaces\"\n").unwrap();
+        std::fs::write(
+            &env_path,
+            "# a full-line comment\n\nPLAIN=value1\nQUOTED=\"value with spaces\"\n",
+        )
+        .unwrap();
 
         let iter = dotenvy::from_path_iter(&env_path).unwrap();
         let pairs: Vec<(String, String)> = iter.map(|item| item.unwrap()).collect();
 
-        assert_eq!(pairs, vec![
-            ("PLAIN".to_string(), "value1".to_string()),
-            ("QUOTED".to_string(), "value with spaces".to_string()),
-        ]);
+        assert_eq!(
+            pairs,
+            vec![
+                ("PLAIN".to_string(), "value1".to_string()),
+                ("QUOTED".to_string(), "value with spaces".to_string()),
+            ]
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

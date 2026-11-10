@@ -1,4 +1,3 @@
-
 use crate::core::constants::STACK_ACCENT_RGB;
 use anyhow::{Context, Result, anyhow, bail};
 use std::io::Write;
@@ -11,8 +10,13 @@ const HOOK_MARKER: &str = "# stack shell hook";
 pub fn profile_path(shell: &str) -> Result<PathBuf> {
     match shell {
         "pwsh" | "powershell" => {
-            let docs = dirs::document_dir().ok_or_else(|| anyhow!("could not resolve the Documents folder"))?;
-            let subdir = if shell == "pwsh" { "PowerShell" } else { "WindowsPowerShell" };
+            let docs = dirs::document_dir()
+                .ok_or_else(|| anyhow!("could not resolve the Documents folder"))?;
+            let subdir = if shell == "pwsh" {
+                "PowerShell"
+            } else {
+                "WindowsPowerShell"
+            };
             Ok(docs.join(subdir).join("Microsoft.PowerShell_profile.ps1"))
         }
         other => bail!("no profile-path resolution for shell '{other}' yet"),
@@ -32,7 +36,11 @@ pub fn detect_shell() -> String {
         let mut pid = sysinfo::get_current_pid().ok()?;
         for _ in 0..SHELL_DETECT_MAX_DEPTH {
             let parent_pid = sys.process(pid)?.parent()?;
-            let parent_name = sys.process(parent_pid)?.name().to_string_lossy().to_lowercase();
+            let parent_name = sys
+                .process(parent_pid)?
+                .name()
+                .to_string_lossy()
+                .to_lowercase();
             let parent_name = parent_name.strip_suffix(".exe").unwrap_or(&parent_name);
             match parent_name {
                 "pwsh" => return Some("pwsh".to_string()),
@@ -47,8 +55,11 @@ pub fn detect_shell() -> String {
 }
 
 pub fn stack_exe_dir() -> Result<PathBuf> {
-    let exe = std::env::current_exe().context("failed to resolve the running stack.exe's own path")?;
-    exe.parent().map(Path::to_path_buf).ok_or_else(|| anyhow!("stack.exe's path has no parent directory"))
+    let exe =
+        std::env::current_exe().context("failed to resolve the running stack.exe's own path")?;
+    exe.parent()
+        .map(Path::to_path_buf)
+        .ok_or_else(|| anyhow!("stack.exe's path has no parent directory"))
 }
 
 /// Wraps the existing `prompt` function rather than replacing it, so an existing
@@ -127,16 +138,20 @@ pub fn ensure_hook_installed(shell: &str) -> Result<bool> {
         .append(true)
         .open(&path)
         .with_context(|| format!("failed to open {}", path.display()))?;
-    writeln!(file, "\n{}", hook_line(shell)).with_context(|| format!("failed to write to {}", path.display()))?;
+    writeln!(file, "\n{}", hook_line(shell))
+        .with_context(|| format!("failed to write to {}", path.display()))?;
     Ok(true)
 }
 
 fn ensure_cmd_hook_installed() -> Result<bool> {
     let bat_path = stack_exe_dir()?.join("stack-activate.bat");
     let content = hook_script("cmd")?;
-    let changed = std::fs::read_to_string(&bat_path).map(|existing| existing.trim() != content.trim()).unwrap_or(true);
+    let changed = std::fs::read_to_string(&bat_path)
+        .map(|existing| existing.trim() != content.trim())
+        .unwrap_or(true);
     if changed {
-        std::fs::write(&bat_path, &content).with_context(|| format!("failed to write {}", bat_path.display()))?;
+        std::fs::write(&bat_path, &content)
+            .with_context(|| format!("failed to write {}", bat_path.display()))?;
     }
     Ok(changed)
 }

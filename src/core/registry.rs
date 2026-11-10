@@ -1,4 +1,3 @@
-
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -50,14 +49,28 @@ impl Registry {
     pub fn register_path(&mut self, kind: &str, name: &str, version: &str, path: &str) {
         self.entries.insert(
             key(kind, name, version),
-            RegistryEntry { kind: kind.to_string(), name: name.to_string(), version: version.to_string(), path: Some(path.to_string()), external: false, port: None },
+            RegistryEntry {
+                kind: kind.to_string(),
+                name: name.to_string(),
+                version: version.to_string(),
+                path: Some(path.to_string()),
+                external: false,
+                port: None,
+            },
         );
     }
 
     pub fn register_external(&mut self, name: &str, version: &str, port: u16) {
         self.entries.insert(
             key("service", name, version),
-            RegistryEntry { kind: "service".to_string(), name: name.to_string(), version: version.to_string(), path: None, external: true, port: Some(port) },
+            RegistryEntry {
+                kind: "service".to_string(),
+                name: name.to_string(),
+                version: version.to_string(),
+                path: None,
+                external: true,
+                port: Some(port),
+            },
         );
     }
 

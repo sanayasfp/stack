@@ -12,7 +12,10 @@ pub struct TrustFile {
 
 impl TrustFile {
     pub fn trust_path() -> PathBuf {
-        dirs::home_dir().expect("could not resolve home directory").join(".stack").join("trust.json")
+        dirs::home_dir()
+            .expect("could not resolve home directory")
+            .join(".stack")
+            .join("trust.json")
     }
 
     pub fn load() -> Self {
@@ -28,7 +31,10 @@ impl TrustFile {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, serde_json::to_string_pretty(self).expect("trust file serializes"))
+        std::fs::write(
+            path,
+            serde_json::to_string_pretty(self).expect("trust file serializes"),
+        )
     }
 }
 
@@ -48,7 +54,12 @@ pub fn risky_fields(manifest: &Manifest) -> String {
     lines.join("\n")
 }
 
-fn confirm_and_store(trust: &mut TrustFile, key: String, current: String, auto_yes: bool) -> Result<()> {
+fn confirm_and_store(
+    trust: &mut TrustFile,
+    key: String,
+    current: String,
+    auto_yes: bool,
+) -> Result<()> {
     let previous = trust.approved.get(&key);
     if previous == Some(&current) {
         return Ok(());
@@ -56,7 +67,9 @@ fn confirm_and_store(trust: &mut TrustFile, key: String, current: String, auto_y
 
     match previous {
         Some(prev) => {
-            println!("stack.toml's commands changed since you last approved them for this project:");
+            println!(
+                "stack.toml's commands changed since you last approved them for this project:"
+            );
             for line in prev.lines() {
                 println!("  - {line}");
             }
@@ -75,7 +88,11 @@ fn confirm_and_store(trust: &mut TrustFile, key: String, current: String, auto_y
     let confirmed = if auto_yes {
         true
     } else {
-        dialoguer::Confirm::new().with_prompt("Trust and run these commands?").default(false).interact().context("failed to read confirmation")?
+        dialoguer::Confirm::new()
+            .with_prompt("Trust and run these commands?")
+            .default(false)
+            .interact()
+            .context("failed to read confirmation")?
     };
     if !confirmed {
         bail!("not trusted — aborted, nothing started");
@@ -92,11 +109,21 @@ pub fn ensure_trusted(project_dir: &Path, manifest: &Manifest, auto_yes: bool) -
         return Ok(());
     }
     let mut trust = TrustFile::load();
-    confirm_and_store(&mut trust, project_dir.display().to_string(), risky, auto_yes)
+    confirm_and_store(
+        &mut trust,
+        project_dir.display().to_string(),
+        risky,
+        auto_yes,
+    )
 }
 
 /// Same as `ensure_trusted`, scoped to one `[script.*]` entry.
-pub fn ensure_script_trusted(project_dir: &Path, script_name: &str, command_repr: &str, auto_yes: bool) -> Result<()> {
+pub fn ensure_script_trusted(
+    project_dir: &Path,
+    script_name: &str,
+    command_repr: &str,
+    auto_yes: bool,
+) -> Result<()> {
     let key = format!("{}::script:{script_name}", project_dir.display());
     let mut trust = TrustFile::load();
     confirm_and_store(&mut trust, key, command_repr.to_string(), auto_yes)
@@ -107,7 +134,11 @@ mod tests {
     use super::*;
 
     fn manifest_from(toml: &str) -> Manifest {
-        let dir = std::env::temp_dir().join(format!("stack-trust-test-{}-{}", std::process::id(), rand_suffix()));
+        let dir = std::env::temp_dir().join(format!(
+            "stack-trust-test-{}-{}",
+            std::process::id(),
+            rand_suffix()
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("stack.toml");
         std::fs::write(&path, toml).unwrap();
@@ -117,7 +148,10 @@ mod tests {
     }
 
     fn rand_suffix() -> u64 {
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos() as u64
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos() as u64
     }
 
     #[test]
@@ -128,7 +162,9 @@ mod tests {
 
     #[test]
     fn risky_fields_includes_run_command() {
-        let manifest = manifest_from("[project]\nname = \"x\"\n[run]\ncommand = \"php -S 127.0.0.1:{port}\"\n");
+        let manifest = manifest_from(
+            "[project]\nname = \"x\"\n[run]\ncommand = \"php -S 127.0.0.1:{port}\"\n",
+        );
         assert_eq!(risky_fields(&manifest), "[run] php -S 127.0.0.1:{port}");
     }
 
@@ -137,7 +173,10 @@ mod tests {
         let manifest = manifest_from(
             "[project]\nname = \"x\"\n[service.mysql]\nversion = \"8.0\"\ncommand = \"mysqld --port={port}\"\n[service.redis]\nversion = \"7\"\nexternal = true\n",
         );
-        assert_eq!(risky_fields(&manifest), "[service.mysql] mysqld --port={port}");
+        assert_eq!(
+            risky_fields(&manifest),
+            "[service.mysql] mysqld --port={port}"
+        );
     }
 
     #[test]

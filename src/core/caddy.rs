@@ -1,7 +1,6 @@
-
-use anyhow::{Context, Result, anyhow, bail};
 use crate::core::process::{self, Runnable};
 use crate::core::state::State;
+use anyhow::{Context, Result, anyhow, bail};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -12,11 +11,16 @@ fn route_id(name: &str) -> String {
 }
 
 pub fn resolve_caddy_binary() -> Result<PathBuf> {
-    if std::process::Command::new("caddy").arg("version").output().is_ok() {
+    if std::process::Command::new("caddy")
+        .arg("version")
+        .output()
+        .is_ok()
+    {
         return Ok(PathBuf::from("caddy"));
     }
 
-    let pinned = crate::core::pinned::pinned_version("caddy").ok_or_else(|| anyhow!("no pinned caddy version known"))?;
+    let pinned = crate::core::pinned::pinned_version("caddy")
+        .ok_or_else(|| anyhow!("no pinned caddy version known"))?;
     let candidate = dirs::home_dir()
         .ok_or_else(|| anyhow!("could not resolve home directory"))?
         .join(".stack")
@@ -40,7 +44,9 @@ pub fn status() -> Option<usize> {
     if !admin_api_alive() {
         return None;
     }
-    let mut response = ureq::get(format!("{ADMIN_API}/config/apps/http/servers/srv0/routes")).call().ok()?;
+    let mut response = ureq::get(format!("{ADMIN_API}/config/apps/http/servers/srv0/routes"))
+        .call()
+        .ok()?;
     let routes: Vec<serde_json::Value> = response.body_mut().read_json().ok()?;
     Some(routes.len())
 }
@@ -51,7 +57,9 @@ pub fn ensure_running(state: &mut State) -> Result<()> {
     }
 
     let bin = resolve_caddy_binary()?;
-    let cwd = bin.parent().map_or_else(std::env::temp_dir, std::path::Path::to_path_buf);
+    let cwd = bin
+        .parent()
+        .map_or_else(std::env::temp_dir, std::path::Path::to_path_buf);
     let command = format!("{} run", shell_words::quote(&bin.to_string_lossy()));
     let extra_env = BTreeMap::new();
     let runnable = Runnable {
@@ -81,7 +89,9 @@ pub fn ensure_running(state: &mut State) -> Result<()> {
             "tls": { "automation": { "policies": [{ "issuers": [{ "module": "internal" }] }] } }
         }
     });
-    ureq::post(format!("{ADMIN_API}/load")).send_json(base).context("failed to bootstrap caddy config")?;
+    ureq::post(format!("{ADMIN_API}/load"))
+        .send_json(base)
+        .context("failed to bootstrap caddy config")?;
 
     state.caddy_pid = Some(pid);
     Ok(())
@@ -91,7 +101,10 @@ pub fn ensure_running(state: &mut State) -> Result<()> {
 /// `https://project.localhost` shows no browser warning. Safe to re-run.
 pub fn trust() -> Result<()> {
     let bin = resolve_caddy_binary()?;
-    let status = std::process::Command::new(bin).arg("trust").status().context("failed to run caddy trust")?;
+    let status = std::process::Command::new(bin)
+        .arg("trust")
+        .status()
+        .context("failed to run caddy trust")?;
     if !status.success() {
         bail!("caddy trust failed");
     }

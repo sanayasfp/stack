@@ -1,11 +1,10 @@
-
 use anyhow::{Context, Result, bail};
 use std::process::Command;
 
-#[cfg(target_os = "macos")]
-mod macos;
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "macos")]
+mod macos;
 
 pub fn detach(cmd: &mut Command) {
     use std::os::unix::process::CommandExt;
@@ -24,7 +23,10 @@ pub fn kill_tree(pid: u32) -> Result<()> {
 }
 
 pub fn is_alive(pid: u32) -> bool {
-    Command::new("kill").args(["-0", &pid.to_string()]).status().is_ok_and(|s| s.success())
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 pub fn install_pinned(tool: &str, version: &str) -> Result<()> {

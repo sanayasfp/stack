@@ -47,7 +47,12 @@ impl CloneEntry {
             .rsplit(['/', ':'])
             .next()
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| anyhow!("could not derive a folder name from repo URL '{}'", self.repo))?;
+            .ok_or_else(|| {
+                anyhow!(
+                    "could not derive a folder name from repo URL '{}'",
+                    self.repo
+                )
+            })?;
         Ok(name.strip_suffix(".git").unwrap_or(name).to_string())
     }
 
@@ -139,8 +144,14 @@ impl PortValue {
             PortValue::Literal(p) => Ok(*p),
             PortValue::Template(template) => {
                 let resolved = placeholder::resolve(template, &BTreeMap::new(), allow_prompt)
-                    .map_err(|missing| anyhow!("missing required value(s): {}", missing.join(", ")))?;
-                resolved.parse::<u16>().with_context(|| format!("'{template}' resolved to '{resolved}', which isn't a valid port number"))
+                    .map_err(|missing| {
+                        anyhow!("missing required value(s): {}", missing.join(", "))
+                    })?;
+                resolved.parse::<u16>().with_context(|| {
+                    format!(
+                        "'{template}' resolved to '{resolved}', which isn't a valid port number"
+                    )
+                })
             }
         }
     }
@@ -159,7 +170,9 @@ pub struct Service {
 
 impl Service {
     pub fn resolve_schema(&self, project_name: &str) -> String {
-        self.schema.clone().unwrap_or_else(|| project_name.to_string())
+        self.schema
+            .clone()
+            .unwrap_or_else(|| project_name.to_string())
     }
 
     pub fn resolve_port(&self, engine: &str, allow_prompt: bool) -> Result<Option<u16>> {
@@ -170,12 +183,16 @@ impl Service {
     }
 
     pub fn resolve_command(&self, engine: &str) -> Option<String> {
-        self.command.clone().or_else(|| default_command(engine).map(str::to_string))
+        self.command
+            .clone()
+            .or_else(|| default_command(engine).map(str::to_string))
     }
 
     pub fn validate(&self, engine: &str) -> Result<()> {
         if self.external && (self.path.is_some() || self.command.is_some()) {
-            bail!("[service.{engine}] can't set path/command when external = true — stack only connects to it, never starts it");
+            bail!(
+                "[service.{engine}] can't set path/command when external = true — stack only connects to it, never starts it"
+            );
         }
         Ok(())
     }
@@ -215,7 +232,10 @@ fn default_cwd() -> String {
 
 impl Run {
     pub fn resolve_port(&self, allow_prompt: bool) -> Result<Option<u16>> {
-        self.port.as_ref().map(|p| p.resolve(allow_prompt)).transpose()
+        self.port
+            .as_ref()
+            .map(|p| p.resolve(allow_prompt))
+            .transpose()
     }
 
     /// `has_php`: if [language.php] is declared, an omitted `command` means
@@ -226,10 +246,14 @@ impl Run {
                 bail!("[run].command is ignored when external = true — remove one or the other");
             }
             if self.port.is_none() {
-                bail!("[run].port is required when external = true — stack has nothing to allocate for a process it isn't starting");
+                bail!(
+                    "[run].port is required when external = true — stack has nothing to allocate for a process it isn't starting"
+                );
             }
         } else if self.command.is_none() && !has_php {
-            bail!("[run].command is required unless external = true, or [language.php] is declared (defaults to stack's PHP FastCGI execution)");
+            bail!(
+                "[run].command is required unless external = true, or [language.php] is declared (defaults to stack's PHP FastCGI execution)"
+            );
         }
         Ok(())
     }
@@ -252,8 +276,17 @@ impl CommandSpec {
     /// Sequential steps: a `Multi` array as-is, a `Single` string split on newlines.
     pub fn steps(&self) -> Vec<String> {
         match self {
-            CommandSpec::Single(s) => s.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect(),
-            CommandSpec::Multi(steps) => steps.iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            CommandSpec::Single(s) => s
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .map(str::to_string)
+                .collect(),
+            CommandSpec::Multi(steps) => steps
+                .iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
         }
     }
 }
@@ -330,7 +363,10 @@ mod tests {
         std::fs::create_dir_all(&tmp).unwrap();
 
         let manifest = write_and_load(&tmp, "[project]\nname = \"my-app\"\n");
-        assert_eq!(manifest.project.domain, Some("my-app.localhost".to_string()));
+        assert_eq!(
+            manifest.project.domain,
+            Some("my-app.localhost".to_string())
+        );
 
         std::fs::remove_dir_all(&tmp).ok();
     }
@@ -340,7 +376,10 @@ mod tests {
         let tmp = std::env::temp_dir().join(format!("stack-test-domain2-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
 
-        let manifest = write_and_load(&tmp, "[project]\nname = \"my-app\"\ndomain = \"custom.example\"\n");
+        let manifest = write_and_load(
+            &tmp,
+            "[project]\nname = \"my-app\"\ndomain = \"custom.example\"\n",
+        );
         assert_eq!(manifest.project.domain, Some("custom.example".to_string()));
 
         std::fs::remove_dir_all(&tmp).ok();
@@ -354,26 +393,38 @@ mod tests {
 
     #[test]
     fn derived_folder_name_strips_git_suffix_from_ssh_and_https_urls() {
-        let ssh: CloneEntry = toml::from_str("repo = \"git@github.com:acme/my-repo.git\"\n").unwrap();
+        let ssh: CloneEntry =
+            toml::from_str("repo = \"git@github.com:acme/my-repo.git\"\n").unwrap();
         assert_eq!(ssh.derived_folder_name().unwrap(), "my-repo");
 
-        let https: CloneEntry = toml::from_str("repo = \"https://github.com/acme/my-repo.git\"\n").unwrap();
+        let https: CloneEntry =
+            toml::from_str("repo = \"https://github.com/acme/my-repo.git\"\n").unwrap();
         assert_eq!(https.derived_folder_name().unwrap(), "my-repo");
 
-        let no_suffix: CloneEntry = toml::from_str("repo = \"https://github.com/acme/my-repo\"\n").unwrap();
+        let no_suffix: CloneEntry =
+            toml::from_str("repo = \"https://github.com/acme/my-repo\"\n").unwrap();
         assert_eq!(no_suffix.derived_folder_name().unwrap(), "my-repo");
     }
 
     #[test]
     fn target_dir_uses_explicit_path_when_set() {
-        let entry: CloneEntry = toml::from_str("repo = \"git@github.com:acme/my-repo.git\"\npath = \"vendor/thing\"\n").unwrap();
-        assert_eq!(entry.target_dir(Path::new("/proj")).unwrap(), Path::new("/proj/vendor/thing"));
+        let entry: CloneEntry =
+            toml::from_str("repo = \"git@github.com:acme/my-repo.git\"\npath = \"vendor/thing\"\n")
+                .unwrap();
+        assert_eq!(
+            entry.target_dir(Path::new("/proj")).unwrap(),
+            Path::new("/proj/vendor/thing")
+        );
     }
 
     #[test]
     fn target_dir_falls_back_to_derived_name_when_path_unset() {
-        let entry: CloneEntry = toml::from_str("repo = \"git@github.com:acme/my-repo.git\"\n").unwrap();
-        assert_eq!(entry.target_dir(Path::new("/proj")).unwrap(), Path::new("/proj/my-repo"));
+        let entry: CloneEntry =
+            toml::from_str("repo = \"git@github.com:acme/my-repo.git\"\n").unwrap();
+        assert_eq!(
+            entry.target_dir(Path::new("/proj")).unwrap(),
+            Path::new("/proj/my-repo")
+        );
     }
 
     #[test]
@@ -381,7 +432,8 @@ mod tests {
         let svc: Service = toml::from_str("version = \"8.0.35\"\n").unwrap();
         assert_eq!(svc.resolve_schema("my_project"), "my_project");
 
-        let svc_explicit: Service = toml::from_str("version = \"8.0.35\"\nschema = \"custom\"\n").unwrap();
+        let svc_explicit: Service =
+            toml::from_str("version = \"8.0.35\"\nschema = \"custom\"\n").unwrap();
         assert_eq!(svc_explicit.resolve_schema("my_project"), "custom");
     }
 
@@ -394,27 +446,34 @@ mod tests {
         assert_eq!(svc.resolve_port("redis", false).unwrap(), None);
 
         let svc_explicit: Service = toml::from_str("version = \"1\"\nport = 9999\n").unwrap();
-        assert_eq!(svc_explicit.resolve_port("mysql", false).unwrap(), Some(9999));
+        assert_eq!(
+            svc_explicit.resolve_port("mysql", false).unwrap(),
+            Some(9999)
+        );
     }
 
     #[test]
     fn service_port_template_resolves_from_env_var() {
         unsafe { std::env::set_var("STACK_TEST_MEILI_PORT", "7700") };
-        let svc: Service = toml::from_str("version = \"1\"\nport = \"{STACK_TEST_MEILI_PORT}\"\n").unwrap();
+        let svc: Service =
+            toml::from_str("version = \"1\"\nport = \"{STACK_TEST_MEILI_PORT}\"\n").unwrap();
         assert_eq!(svc.resolve_port("meilisearch", false).unwrap(), Some(7700));
         unsafe { std::env::remove_var("STACK_TEST_MEILI_PORT") };
     }
 
     #[test]
     fn service_port_template_missing_env_var_errors_without_prompt() {
-        let svc: Service = toml::from_str("version = \"1\"\nport = \"{STACK_TEST_DEFINITELY_UNSET_PORT}\"\n").unwrap();
+        let svc: Service =
+            toml::from_str("version = \"1\"\nport = \"{STACK_TEST_DEFINITELY_UNSET_PORT}\"\n")
+                .unwrap();
         assert!(svc.resolve_port("meilisearch", false).is_err());
     }
 
     #[test]
     fn service_port_template_non_numeric_value_errors() {
         unsafe { std::env::set_var("STACK_TEST_BOGUS_PORT", "not-a-number") };
-        let svc: Service = toml::from_str("version = \"1\"\nport = \"{STACK_TEST_BOGUS_PORT}\"\n").unwrap();
+        let svc: Service =
+            toml::from_str("version = \"1\"\nport = \"{STACK_TEST_BOGUS_PORT}\"\n").unwrap();
         assert!(svc.resolve_port("meilisearch", false).is_err());
         unsafe { std::env::remove_var("STACK_TEST_BOGUS_PORT") };
     }
@@ -425,8 +484,12 @@ mod tests {
         assert!(svc.resolve_command("mysql").is_some());
         assert!(svc.resolve_command("redis").is_none());
 
-        let svc_explicit: Service = toml::from_str("version = \"1\"\ncommand = \"custom --flag\"\n").unwrap();
-        assert_eq!(svc_explicit.resolve_command("mysql"), Some("custom --flag".to_string()));
+        let svc_explicit: Service =
+            toml::from_str("version = \"1\"\ncommand = \"custom --flag\"\n").unwrap();
+        assert_eq!(
+            svc_explicit.resolve_command("mysql"),
+            Some("custom --flag".to_string())
+        );
     }
 
     #[test]
@@ -441,7 +504,9 @@ mod tests {
 
     #[test]
     fn run_external_rejects_command() {
-        let run: Run = toml::from_str("external = true\nport = 8000\ncommand = \"uvicorn --reload\"\n").unwrap();
+        let run: Run =
+            toml::from_str("external = true\nport = 8000\ncommand = \"uvicorn --reload\"\n")
+                .unwrap();
         assert!(run.validate(false).is_err());
     }
 
@@ -466,7 +531,8 @@ mod tests {
     #[test]
     fn language_detailed_table_form_parses() {
         let map: BTreeMap<String, Language> =
-            toml::from_str("[rust]\nversion = \"1.75.0\"\nmanager = \"vfox\"\nplugin = \"rust\"\n").unwrap();
+            toml::from_str("[rust]\nversion = \"1.75.0\"\nmanager = \"vfox\"\nplugin = \"rust\"\n")
+                .unwrap();
         let lang = map.get("rust").unwrap();
         assert_eq!(lang.version(), Some("1.75.0"));
         assert_eq!(lang.manager(), Some("vfox"));
@@ -475,7 +541,8 @@ mod tests {
 
     #[test]
     fn language_byo_path_form_parses() {
-        let map: BTreeMap<String, Language> = toml::from_str("[legacyphp]\npath = \"C:/tools/php-5.6/php.exe\"\n").unwrap();
+        let map: BTreeMap<String, Language> =
+            toml::from_str("[legacyphp]\npath = \"C:/tools/php-5.6/php.exe\"\n").unwrap();
         let lang = map.get("legacyphp").unwrap();
         assert_eq!(lang.path(), Some("C:/tools/php-5.6/php.exe"));
         assert_eq!(lang.version(), None);
@@ -483,7 +550,8 @@ mod tests {
 
     #[test]
     fn language_venv_field_parses() {
-        let map: BTreeMap<String, Language> = toml::from_str("[python]\nversion = \"3.11.9\"\nvenv = \"efinenv\"\n").unwrap();
+        let map: BTreeMap<String, Language> =
+            toml::from_str("[python]\nversion = \"3.11.9\"\nvenv = \"efinenv\"\n").unwrap();
         let lang = map.get("python").unwrap();
         assert_eq!(lang.venv(), Some("efinenv"));
     }
@@ -512,29 +580,44 @@ mod tests {
     #[test]
     fn command_spec_multiline_string_splits_into_steps() {
         let spec = parse_command_spec("command = \"\"\"\nstep one\nstep two\n\"\"\"\n");
-        assert_eq!(spec.steps(), vec!["step one".to_string(), "step two".to_string()]);
+        assert_eq!(
+            spec.steps(),
+            vec!["step one".to_string(), "step two".to_string()]
+        );
     }
 
     #[test]
     fn command_spec_array_form_is_steps_as_given() {
         let spec = parse_command_spec("command = [\"step one\", \"step two\"]\n");
-        assert_eq!(spec.steps(), vec!["step one".to_string(), "step two".to_string()]);
+        assert_eq!(
+            spec.steps(),
+            vec!["step one".to_string(), "step two".to_string()]
+        );
     }
 
     #[test]
     fn command_spec_ignores_blank_lines() {
         let spec = parse_command_spec("command = \"\"\"\nstep one\n\n\nstep two\n\"\"\"\n");
-        assert_eq!(spec.steps(), vec!["step one".to_string(), "step two".to_string()]);
+        assert_eq!(
+            spec.steps(),
+            vec!["step one".to_string(), "step two".to_string()]
+        );
     }
 
     #[test]
     fn script_entry_parses_with_default_cwd() {
         let tmp = std::env::temp_dir().join(format!("stack-test-script-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
-        let manifest = write_and_load(&tmp, "[script.migrate]\ncommand = \"python manage.py migrate\"\n");
+        let manifest = write_and_load(
+            &tmp,
+            "[script.migrate]\ncommand = \"python manage.py migrate\"\n",
+        );
         let script = manifest.script.get("migrate").unwrap();
         assert_eq!(script.cwd, ".");
-        assert_eq!(script.command.steps(), vec!["python manage.py migrate".to_string()]);
+        assert_eq!(
+            script.command.steps(),
+            vec!["python manage.py migrate".to_string()]
+        );
         std::fs::remove_dir_all(&tmp).ok();
     }
 
@@ -551,7 +634,10 @@ mod tests {
     fn project_env_files_parses_list() {
         let tmp = std::env::temp_dir().join(format!("stack-test-envfiles2-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
-        let manifest = write_and_load(&tmp, "[project]\nname = \"x\"\nenv_files = [\"nested/.env\"]\n");
+        let manifest = write_and_load(
+            &tmp,
+            "[project]\nname = \"x\"\nenv_files = [\"nested/.env\"]\n",
+        );
         assert_eq!(manifest.project.env_files, vec!["nested/.env".to_string()]);
         std::fs::remove_dir_all(&tmp).ok();
     }
@@ -579,8 +665,14 @@ mod tests {
             &tmp,
             "[language]\nphp = \"8.3.1\"\n\n[language.rust]\nversion = \"1.75.0\"\nmanager = \"vfox\"\n",
         );
-        assert_eq!(manifest.language.get("php").unwrap().version(), Some("8.3.1"));
-        assert_eq!(manifest.language.get("rust").unwrap().manager(), Some("vfox"));
+        assert_eq!(
+            manifest.language.get("php").unwrap().version(),
+            Some("8.3.1")
+        );
+        assert_eq!(
+            manifest.language.get("rust").unwrap().manager(),
+            Some("vfox")
+        );
 
         std::fs::remove_dir_all(&tmp).ok();
     }

@@ -1,4 +1,3 @@
-use anyhow::{Context, Result, anyhow, bail};
 use crate::core::caddy;
 use crate::core::commands::shared::{self, resolve_tool};
 use crate::core::manifest::{self, CloneEntry, Manifest, Service};
@@ -8,12 +7,17 @@ use crate::core::registry::Registry;
 use crate::core::state::State;
 use crate::core::{placeholder, style, toolchain, trust};
 use crate::platform;
+use anyhow::{Context, Result, anyhow, bail};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 fn join_names<'a>(names: impl Iterator<Item = &'a String>) -> String {
     let joined: Vec<&str> = names.map(String::as_str).collect();
-    if joined.is_empty() { "(none)".to_string() } else { joined.join(", ") }
+    if joined.is_empty() {
+        "(none)".to_string()
+    } else {
+        joined.join(", ")
+    }
 }
 
 fn print_version(binary: &Path, label: &str) {
@@ -24,9 +28,17 @@ fn print_version(binary: &Path, label: &str) {
                 .next()
                 .unwrap_or("")
                 .to_string();
-            println!("  {}: {} -> {first_line}", style::ok(label), binary.display());
+            println!(
+                "  {}: {} -> {first_line}",
+                style::ok(label),
+                binary.display()
+            );
         }
-        Err(e) => eprintln!("  {}: failed to run {}: {e}", style::err(label), binary.display()),
+        Err(e) => eprintln!(
+            "  {}: failed to run {}: {e}",
+            style::err(label),
+            binary.display()
+        ),
     }
 }
 
@@ -42,12 +54,26 @@ fn save_state(state: &State) {
 }
 
 fn record_project_versions(manifest: &Manifest, project_dir: &Path) {
-    let languages: Vec<(String, String)> =
-        manifest.language.iter().filter_map(|(name, entry)| entry.version().map(|v| (name.clone(), v.to_string()))).collect();
-    let services: Vec<(String, String)> = manifest.service.iter().map(|(name, svc)| (name.clone(), svc.version.clone())).collect();
+    let languages: Vec<(String, String)> = manifest
+        .language
+        .iter()
+        .filter_map(|(name, entry)| entry.version().map(|v| (name.clone(), v.to_string())))
+        .collect();
+    let services: Vec<(String, String)> = manifest
+        .service
+        .iter()
+        .map(|(name, svc)| (name.clone(), svc.version.clone()))
+        .collect();
 
     let mut projects = ProjectsFile::load();
-    projects.projects.insert(manifest.project.name.clone(), ProjectRecord { directory: project_dir.display().to_string(), languages, services });
+    projects.projects.insert(
+        manifest.project.name.clone(),
+        ProjectRecord {
+            directory: project_dir.display().to_string(),
+            languages,
+            services,
+        },
+    );
     if let Err(e) = projects.save() {
         eprintln!("  warning: failed to persist projects.json: {e}");
     }
@@ -68,10 +94,16 @@ fn resolve_up_target(target: &str) -> Result<(PathBuf, Manifest)> {
 fn route_project(state: &mut State, name: &str, domain: &str, port: u16) {
     match caddy::ensure_running(state) {
         Ok(()) => match caddy::push_route(name, domain, port) {
-            Ok(()) => println!("  {}: http://{domain} -> 127.0.0.1:{port}", style::ok("routed")),
+            Ok(()) => println!(
+                "  {}: http://{domain} -> 127.0.0.1:{port}",
+                style::ok("routed")
+            ),
             Err(e) => eprintln!("  {}: failed to push route: {e:#}", style::warn("warning")),
         },
-        Err(e) => eprintln!("  {}: could not start/reach caddy for routing: {e:#}", style::warn("warning")),
+        Err(e) => eprintln!(
+            "  {}: could not start/reach caddy for routing: {e:#}",
+            style::warn("warning")
+        ),
     }
 }
 
@@ -81,7 +113,10 @@ pub(crate) fn port_in_use(port: u16) -> bool {
 }
 
 fn build_path_env(resolved_binaries: &[PathBuf], extra_dirs: &[PathBuf]) -> String {
-    let mut dirs: Vec<PathBuf> = resolved_binaries.iter().filter_map(|p| p.parent().map(Path::to_path_buf)).collect();
+    let mut dirs: Vec<PathBuf> = resolved_binaries
+        .iter()
+        .filter_map(|p| p.parent().map(Path::to_path_buf))
+        .collect();
     dirs.extend(extra_dirs.iter().cloned());
     if let Some(existing) = std::env::var_os("PATH") {
         dirs.extend(std::env::split_paths(&existing));
@@ -92,7 +127,10 @@ fn build_path_env(resolved_binaries: &[PathBuf], extra_dirs: &[PathBuf]) -> Stri
 }
 
 /// Resolves each declared language's bin dir plus any `[language.*].venv` dir.
-fn resolve_language_path_dirs(manifest: &Manifest, project_dir: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
+fn resolve_language_path_dirs(
+    manifest: &Manifest,
+    project_dir: &Path,
+) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let mut resolved_binaries = Vec::new();
     let mut venv_dirs = Vec::new();
     for (name, entry) in &manifest.language {
@@ -113,7 +151,9 @@ fn resolve_project_name(explicit: Option<String>) -> Result<String> {
     }
     match Manifest::find_and_load(&PathBuf::from(".")) {
         Ok((_, manifest)) => Ok(manifest.project.name),
-        Err(_) => bail!("no project name given, and no stack.toml found in this directory or any parent"),
+        Err(_) => {
+            bail!("no project name given, and no stack.toml found in this directory or any parent")
+        }
     }
 }
 
@@ -124,7 +164,10 @@ fn load_and_heal_state() -> State {
     state.projects.retain(|name, entry| {
         let alive = platform::is_alive(entry.pid);
         if !alive {
-            println!("  (dropping stale entry: project {name}, pid {} no longer alive)", entry.pid);
+            println!(
+                "  (dropping stale entry: project {name}, pid {} no longer alive)",
+                entry.pid
+            );
             dirty = true;
         }
         alive
@@ -132,7 +175,10 @@ fn load_and_heal_state() -> State {
     state.services.retain(|name, entry| {
         let alive = platform::is_alive(entry.pid);
         if !alive {
-            println!("  (dropping stale entry: service {name}, pid {} no longer alive)", entry.pid);
+            println!(
+                "  (dropping stale entry: service {name}, pid {} no longer alive)",
+                entry.pid
+            );
             dirty = true;
         }
         alive
@@ -140,15 +186,16 @@ fn load_and_heal_state() -> State {
     state.external_runs.retain(|name, entry| {
         let alive = port_in_use(entry.port);
         if !alive {
-            println!("  (dropping stale entry: external run {name}, port {} no longer listening)", entry.port);
+            println!(
+                "  (dropping stale entry: external run {name}, port {} no longer listening)",
+                entry.port
+            );
             dirty = true;
         }
         alive
     });
 
-    if dirty
-        && let Err(e) = state.save()
-    {
+    if dirty && let Err(e) = state.save() {
         eprintln!("warning: failed to persist self-healed state: {e}");
     }
     state
@@ -159,7 +206,10 @@ fn handle_external_service(engine: &str, svc: &Service, port: u16) -> Result<()>
     if !port_in_use(port) {
         bail!("[service.{engine}] is marked external but nothing is listening on port {port}");
     }
-    println!("  {}: external — connected on port {port}", style::ok(&format!("service.{engine}")));
+    println!(
+        "  {}: external — connected on port {port}",
+        style::ok(&format!("service.{engine}"))
+    );
     Ok(())
 }
 
@@ -169,7 +219,12 @@ fn shell_safe_path(path: &str) -> String {
     path.replace('\\', "/")
 }
 
-fn start_service_if_needed(state: &mut State, engine: &str, svc: &Service, allow_prompt: bool) -> Result<(u32, u16, bool)> {
+fn start_service_if_needed(
+    state: &mut State,
+    engine: &str,
+    svc: &Service,
+    allow_prompt: bool,
+) -> Result<(u32, u16, bool)> {
     svc.validate(engine)?;
     let state_key = format!("{engine}@{}", svc.version);
 
@@ -183,16 +238,18 @@ fn start_service_if_needed(state: &mut State, engine: &str, svc: &Service, allow
                         );
                     }
                     Ok(_) => {}
-                    Err(e) => println!("  service.{engine}: warning — could not resolve declared port: {e:#}"),
+                    Err(e) => println!(
+                        "  service.{engine}: warning — could not resolve declared port: {e:#}"
+                    ),
                 }
                 return Ok((entry.pid, port, false));
             }
         }
     }
 
-    let port = svc
-        .resolve_port(engine, allow_prompt)?
-        .ok_or_else(|| anyhow!("[service.{engine}].port is required (no built-in default for this engine)"))?;
+    let port = svc.resolve_port(engine, allow_prompt)?.ok_or_else(|| {
+        anyhow!("[service.{engine}].port is required (no built-in default for this engine)")
+    })?;
     if port_in_use(port) {
         bail!(
             "port {port} is already in use by something else — if that's an existing {engine} you want to reuse, add `external = true` to [service.{engine}] instead of starting a new one"
@@ -205,9 +262,9 @@ fn start_service_if_needed(state: &mut State, engine: &str, svc: &Service, allow
             anyhow!("[service.{engine}] has no inline `path` and nothing registered for {engine}@{} — run `stack register service {engine} {} <path>` first", svc.version, svc.version)
         })?,
     };
-    let command = svc
-        .resolve_command(engine)
-        .ok_or_else(|| anyhow!("[service.{engine}].command is required (no built-in default for this engine)"))?;
+    let command = svc.resolve_command(engine).ok_or_else(|| {
+        anyhow!("[service.{engine}].command is required (no built-in default for this engine)")
+    })?;
 
     let data_dir = dirs::home_dir()
         .ok_or_else(|| anyhow!("could not resolve home directory"))?
@@ -215,15 +272,19 @@ fn start_service_if_needed(state: &mut State, engine: &str, svc: &Service, allow
         .join("data")
         .join(engine)
         .join(&svc.version);
-    std::fs::create_dir_all(&data_dir).with_context(|| format!("failed to create data directory {}", data_dir.display()))?;
+    std::fs::create_dir_all(&data_dir)
+        .with_context(|| format!("failed to create data directory {}", data_dir.display()))?;
 
     let mut reserved = BTreeMap::new();
     reserved.insert("path".to_string(), shell_safe_path(&path));
-    reserved.insert("data_dir".to_string(), shell_safe_path(&data_dir.display().to_string()));
+    reserved.insert(
+        "data_dir".to_string(),
+        shell_safe_path(&data_dir.display().to_string()),
+    );
     reserved.insert("port".to_string(), port.to_string());
 
-    let resolved_command =
-        placeholder::resolve(&command, &reserved, allow_prompt).map_err(|missing| anyhow!("missing required value(s): {}", missing.join(", ")))?;
+    let resolved_command = placeholder::resolve(&command, &reserved, allow_prompt)
+        .map_err(|missing| anyhow!("missing required value(s): {}", missing.join(", ")))?;
 
     let extra_env = BTreeMap::new();
     let runnable = Runnable {
@@ -233,17 +294,34 @@ fn start_service_if_needed(state: &mut State, engine: &str, svc: &Service, allow
         name: &state_key,
     };
     let pid = process::spawn(&runnable)?;
-    process::record_service(state, &state_key, pid, Some(port), Some(data_dir.display().to_string()));
+    process::record_service(
+        state,
+        &state_key,
+        pid,
+        Some(port),
+        Some(data_dir.display().to_string()),
+    );
     Ok((pid, port, true))
 }
 
 fn handle_external_run(state: &mut State, manifest: &Manifest, port: u16) {
     if port_in_use(port) {
-        println!("  {}: external — something is already listening on port {port}", style::ok("run"));
+        println!(
+            "  {}: external — something is already listening on port {port}",
+            style::ok("run")
+        );
     } else {
-        println!("  {}: external — nothing listening on port {port} yet; start your dev server whenever you're ready", style::warn("run"));
+        println!(
+            "  {}: external — nothing listening on port {port} yet; start your dev server whenever you're ready",
+            style::warn("run")
+        );
     }
-    process::record_external_run(state, &manifest.project.name, port, manifest.project.domain.clone());
+    process::record_external_run(
+        state,
+        &manifest.project.name,
+        port,
+        manifest.project.domain.clone(),
+    );
     if let Some(domain) = &manifest.project.domain {
         route_project(state, &manifest.project.name, domain, port);
     }
@@ -251,7 +329,12 @@ fn handle_external_run(state: &mut State, manifest: &Manifest, port: u16) {
 }
 
 fn run_git(args: &[&str], cwd: &Path) -> Result<()> {
-    let status = std::process::Command::new("git").arg("-C").arg(cwd).args(args).status().context("failed to run git")?;
+    let status = std::process::Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .args(args)
+        .status()
+        .context("failed to run git")?;
     if !status.success() {
         bail!("git {} failed", args.join(" "));
     }
@@ -259,9 +342,18 @@ fn run_git(args: &[&str], cwd: &Path) -> Result<()> {
 }
 
 fn git_output(args: &[&str], cwd: &Path) -> Result<String> {
-    let output = std::process::Command::new("git").arg("-C").arg(cwd).args(args).output().context("failed to run git")?;
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .args(args)
+        .output()
+        .context("failed to run git")?;
     if !output.status.success() {
-        bail!("git {} failed: {}", args.join(" "), String::from_utf8_lossy(&output.stderr).trim());
+        bail!(
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
@@ -270,14 +362,21 @@ fn git_output(args: &[&str], cwd: &Path) -> Result<String> {
 fn remote_default_branch(target: &Path) -> Result<String> {
     run_git(&["remote", "set-head", "origin", "-a"], target)?;
     let symref = git_output(&["symbolic-ref", "refs/remotes/origin/HEAD"], target)?;
-    symref.strip_prefix("refs/remotes/origin/").map(str::to_string).ok_or_else(|| anyhow!("unexpected symbolic-ref output: {symref}"))
+    symref
+        .strip_prefix("refs/remotes/origin/")
+        .map(str::to_string)
+        .ok_or_else(|| anyhow!("unexpected symbolic-ref output: {symref}"))
 }
 
 /// Clones into an existing (non-empty) target dir via init + remote + fetch + checkout,
 /// since `git clone` itself requires an empty target.
 fn clone_in_place(clone: &CloneEntry, target: &Path) -> Result<()> {
     if target.join(".git").is_dir() {
-        println!("  clone: {} already initialized in {}, leaving untouched", clone.repo, target.display());
+        println!(
+            "  clone: {} already initialized in {}, leaving untouched",
+            clone.repo,
+            target.display()
+        );
         return Ok(());
     }
     println!("  clone: {} -> {} (in place)", clone.repo, target.display());
@@ -288,7 +387,10 @@ fn clone_in_place(clone: &CloneEntry, target: &Path) -> Result<()> {
         Some(git_ref) => git_ref.clone(),
         None => remote_default_branch(target)?,
     };
-    run_git(&["checkout", "-B", &branch, &format!("origin/{branch}")], target)
+    run_git(
+        &["checkout", "-B", &branch, &format!("origin/{branch}")],
+        target,
+    )
 }
 
 fn process_clones(project_dir: &Path, clones: &[CloneEntry]) -> Result<()> {
@@ -301,7 +403,10 @@ fn process_clones(project_dir: &Path, clones: &[CloneEntry]) -> Result<()> {
         }
 
         if target.exists() {
-            println!("  clone: {} already exists, leaving untouched", target.display());
+            println!(
+                "  clone: {} already exists, leaving untouched",
+                target.display()
+            );
             continue;
         }
 
@@ -374,7 +479,10 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
     if run_clones {
         process_clones(&project_dir, &manifest.clones)?;
     } else if !manifest.clones.is_empty() {
-        println!("  clone: {} declared, not fetched (pass --clone to fetch)", manifest.clones.len());
+        println!(
+            "  clone: {} declared, not fetched (pass --clone to fetch)",
+            manifest.clones.len()
+        );
     }
 
     let mut resolved_binaries: Vec<PathBuf> = Vec::new();
@@ -396,7 +504,11 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
     for (name, tool) in &manifest.tool {
         match resolve_tool(name, tool, true) {
             Ok(bin) => {
-                println!("  {}: {}", style::ok(&format!("tool.{name}")), bin.display());
+                println!(
+                    "  {}: {}",
+                    style::ok(&format!("tool.{name}")),
+                    bin.display()
+                );
                 resolved_binaries.push(bin);
             }
             Err(e) => eprintln!("  {}: {e:#}", style::err(&format!("tool.{name}"))),
@@ -411,21 +523,32 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
     }
     for (engine, svc) in &manifest.service {
         let registry_external_port: Option<u16> = if svc.path.is_none() && !svc.external {
-            Registry::load().lookup("service", engine, &svc.version).filter(|e| e.external).and_then(|e| e.port)
+            Registry::load()
+                .lookup("service", engine, &svc.version)
+                .filter(|e| e.external)
+                .and_then(|e| e.port)
         } else {
             None
         };
         let is_external = svc.external || registry_external_port.is_some();
 
         if is_external {
-            let declared_port = match svc.port.as_ref().map(|p| p.resolve(allow_prompt)).transpose() {
+            let declared_port = match svc
+                .port
+                .as_ref()
+                .map(|p| p.resolve(allow_prompt))
+                .transpose()
+            {
                 Ok(p) => p,
                 Err(e) => {
                     eprintln!("  {}: {e:#}", style::err(&format!("service.{engine}")));
                     continue;
                 }
             };
-            let port = match declared_port.or(registry_external_port).or_else(|| manifest::conventional_port(engine)) {
+            let port = match declared_port
+                .or(registry_external_port)
+                .or_else(|| manifest::conventional_port(engine))
+            {
                 Some(p) => p,
                 None => {
                     eprintln!(
@@ -443,15 +566,24 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
         }
         match start_service_if_needed(&mut state, engine, svc, allow_prompt) {
             Ok((pid, port, true)) => {
-                println!("  {}: started (pid {pid}, port {port})", style::ok(&format!("service.{engine}")));
+                println!(
+                    "  {}: started (pid {pid}, port {port})",
+                    style::ok(&format!("service.{engine}"))
+                );
                 println!(
                     "    {}",
-                    style::warn(&format!("schema '{}' — automatic creation not yet implemented; create it manually if needed", svc.resolve_schema(&manifest.project.name)))
+                    style::warn(&format!(
+                        "schema '{}' — automatic creation not yet implemented; create it manually if needed",
+                        svc.resolve_schema(&manifest.project.name)
+                    ))
                 );
                 used_services.push(format!("{engine}@{}", svc.version));
             }
             Ok((pid, port, false)) => {
-                println!("  {}: already running, shared with other projects (pid {pid}, port {port})", style::ok(&format!("service.{engine}")));
+                println!(
+                    "  {}: already running, shared with other projects (pid {pid}, port {port})",
+                    style::ok(&format!("service.{engine}"))
+                );
                 used_services.push(format!("{engine}@{}", svc.version));
             }
             Err(e) => eprintln!("  {}: {e:#}", style::err(&format!("service.{engine}"))),
@@ -470,7 +602,9 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
 
     println!();
     if run.external {
-        let port = run.resolve_port(allow_prompt)?.expect("run.validate() guarantees port is set when external");
+        let port = run
+            .resolve_port(allow_prompt)?
+            .expect("run.validate() guarantees port is set when external");
         handle_external_run(&mut state, &manifest, port);
         return Ok(());
     }
@@ -500,11 +634,17 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
             })?;
             let mut extra_env = BTreeMap::new();
             extra_env.insert("PORT".to_string(), port.to_string());
-            extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries, &venv_dirs));
+            extra_env.insert(
+                "PATH".to_string(),
+                build_path_env(&resolved_binaries, &venv_dirs),
+            );
             (resolved_command, extra_env, None)
         }
         None => {
-            let php_entry = manifest.language.get("php").expect("run.validate() guarantees [language.php] when command is omitted");
+            let php_entry = manifest
+                .language
+                .get("php")
+                .expect("run.validate() guarantees [language.php] when command is omitted");
             let php_binary = toolchain::resolve("php", php_entry)?;
             let php_cgi = php_cgi_binary(&php_binary);
             if !php_cgi.is_file() {
@@ -515,10 +655,16 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
                 );
             }
             let docroot = detect_php_docroot(&run_cwd);
-            let resolved_command = format!("{} -b 127.0.0.1:{port}", shell_words::quote(&shell_safe_path(&php_cgi.to_string_lossy())));
+            let resolved_command = format!(
+                "{} -b 127.0.0.1:{port}",
+                shell_words::quote(&shell_safe_path(&php_cgi.to_string_lossy()))
+            );
             let mut extra_env = BTreeMap::new();
             extra_env.insert("PORT".to_string(), port.to_string());
-            extra_env.insert("PATH".to_string(), build_path_env(&resolved_binaries, &venv_dirs));
+            extra_env.insert(
+                "PATH".to_string(),
+                build_path_env(&resolved_binaries, &venv_dirs),
+            );
             let workers = php_entry.workers().unwrap_or(4);
             extra_env.insert("PHP_FCGI_CHILDREN".to_string(), workers.to_string());
             extra_env.insert("PHP_FCGI_MAX_REQUESTS".to_string(), "500".to_string());
@@ -534,12 +680,26 @@ pub fn up(target: &str, allow_prompt: bool, run_clones: bool, auto_yes: bool) ->
     };
 
     let pid = process::spawn(&runnable)?;
-    process::record_project(&mut state, &manifest.project.name, pid, Some(port), used_services);
-    println!("  {}: {resolved_command}  (pid {pid}, port {port})", style::ok("run"));
-    println!("  log: {}", process::log_path(&manifest.project.name).display());
+    process::record_project(
+        &mut state,
+        &manifest.project.name,
+        pid,
+        Some(port),
+        used_services,
+    );
+    println!(
+        "  {}: {resolved_command}  (pid {pid}, port {port})",
+        style::ok("run")
+    );
+    println!(
+        "  log: {}",
+        process::log_path(&manifest.project.name).display()
+    );
     if let Some(domain) = &manifest.project.domain {
         match &php_docroot {
-            Some(docroot) => route_project_fastcgi(&mut state, &manifest.project.name, domain, port, docroot),
+            Some(docroot) => {
+                route_project_fastcgi(&mut state, &manifest.project.name, domain, port, docroot)
+            }
             None => route_project(&mut state, &manifest.project.name, domain, port),
         }
     }
@@ -565,7 +725,10 @@ pub fn run_script(name: Option<String>, extra_args: &[String], auto_yes: bool) -
         return Ok(());
     };
 
-    let entry = manifest.script.get(&name).ok_or_else(|| anyhow!("no [script.{name}] declared in {}", path.display()))?;
+    let entry = manifest
+        .script
+        .get(&name)
+        .ok_or_else(|| anyhow!("no [script.{name}] declared in {}", path.display()))?;
     let steps = entry.command.steps();
     if steps.is_empty() {
         bail!("[script.{name}].command is empty");
@@ -585,9 +748,13 @@ pub fn run_script(name: Option<String>, extra_args: &[String], auto_yes: bool) -
             step_text.push(' ');
             step_text.push_str(&shell_words::join(extra_args));
         }
-        let resolved = placeholder::resolve(&step_text, &BTreeMap::new(), true).map_err(|missing| anyhow!("missing required value(s): {}", missing.join(", ")))?;
-        let parts = shell_words::split(&resolved).with_context(|| format!("could not parse script step '{resolved}'"))?;
-        let (program, args) = parts.split_first().ok_or_else(|| anyhow!("[script.{name}] step is empty"))?;
+        let resolved = placeholder::resolve(&step_text, &BTreeMap::new(), true)
+            .map_err(|missing| anyhow!("missing required value(s): {}", missing.join(", ")))?;
+        let parts = shell_words::split(&resolved)
+            .with_context(|| format!("could not parse script step '{resolved}'"))?;
+        let (program, args) = parts
+            .split_first()
+            .ok_or_else(|| anyhow!("[script.{name}] step is empty"))?;
 
         println!("  {}", style::ok(&resolved));
         let status = std::process::Command::new(program)
@@ -610,21 +777,37 @@ fn php_cgi_binary(php_binary: &Path) -> PathBuf {
 /// Detects whether index.php lives in `public/` (Laravel/Symfony) or the project root.
 fn detect_php_docroot(run_cwd: &Path) -> String {
     let public_dir = run_cwd.join("public");
-    if public_dir.join("index.php").is_file() { public_dir.display().to_string() } else { run_cwd.display().to_string() }
+    if public_dir.join("index.php").is_file() {
+        public_dir.display().to_string()
+    } else {
+        run_cwd.display().to_string()
+    }
 }
 
 fn route_project_fastcgi(state: &mut State, name: &str, domain: &str, port: u16, docroot: &str) {
     match caddy::ensure_running(state) {
         Ok(()) => match caddy::push_fastcgi_route(name, domain, port, docroot) {
-            Ok(()) => println!("  {}: http://{domain} -> 127.0.0.1:{port} (fastcgi, root {docroot})", style::ok("routed")),
+            Ok(()) => println!(
+                "  {}: http://{domain} -> 127.0.0.1:{port} (fastcgi, root {docroot})",
+                style::ok("routed")
+            ),
             Err(e) => eprintln!("  {}: failed to push route: {e:#}", style::warn("warning")),
         },
-        Err(e) => eprintln!("  {}: could not start/reach caddy for routing: {e:#}", style::warn("warning")),
+        Err(e) => eprintln!(
+            "  {}: could not start/reach caddy for routing: {e:#}",
+            style::warn("warning")
+        ),
     }
 }
 
-fn find_dependent_project<'a>(projects: &'a BTreeMap<String, crate::core::state::ProcessEntry>, service_key: &str) -> Option<&'a str> {
-    projects.iter().find(|(_, other)| other.services.iter().any(|s| s == service_key)).map(|(name, _)| name.as_str())
+fn find_dependent_project<'a>(
+    projects: &'a BTreeMap<String, crate::core::state::ProcessEntry>,
+    service_key: &str,
+) -> Option<&'a str> {
+    projects
+        .iter()
+        .find(|(_, other)| other.services.iter().any(|s| s == service_key))
+        .map(|(name, _)| name.as_str())
 }
 
 /// Uses the self-healed state so a dead project's stale `services` list can't
@@ -677,7 +860,10 @@ pub fn down(project: Option<String>, all: bool) -> Result<()> {
                 }
                 if let Some(service_entry) = state.services.remove(service_key) {
                     match platform::kill_tree(service_entry.pid) {
-                        Ok(()) => println!("  stopped service {service_key} (pid {})", service_entry.pid),
+                        Ok(()) => println!(
+                            "  stopped service {service_key} (pid {})",
+                            service_entry.pid
+                        ),
                         Err(e) => eprintln!("  {service_key}: {e:#}"),
                     }
                 }
@@ -700,7 +886,12 @@ pub fn down(project: Option<String>, all: bool) -> Result<()> {
 pub fn restart(project: Option<String>, all: bool, auto_yes: bool) -> Result<()> {
     if all {
         let state = load_and_heal_state();
-        let running: std::collections::BTreeSet<String> = state.projects.keys().chain(state.external_runs.keys()).cloned().collect();
+        let running: std::collections::BTreeSet<String> = state
+            .projects
+            .keys()
+            .chain(state.external_runs.keys())
+            .cloned()
+            .collect();
         if running.is_empty() {
             println!("nothing running to restart");
             return Ok(());
@@ -742,7 +933,10 @@ pub fn describe(target: Option<String>) -> Result<()> {
             None => println!("  running: no"),
         },
     }
-    println!("  log: {}", process::log_path(&manifest.project.name).display());
+    println!(
+        "  log: {}",
+        process::log_path(&manifest.project.name).display()
+    );
 
     if !manifest.language.is_empty() {
         println!("languages:");
@@ -755,7 +949,8 @@ pub fn describe(target: Option<String>) -> Result<()> {
                         if ini.is_file() {
                             println!("    php.ini: {}", ini.display());
                         }
-                        let cgi = bin.with_file_name(format!("php-cgi{}", std::env::consts::EXE_SUFFIX));
+                        let cgi =
+                            bin.with_file_name(format!("php-cgi{}", std::env::consts::EXE_SUFFIX));
                         if cgi.is_file() {
                             println!("    php-cgi: {}", cgi.display());
                         }
@@ -775,13 +970,26 @@ pub fn describe(target: Option<String>) -> Result<()> {
             }
             match &svc.path {
                 Some(p) => println!("  {engine}: {p}"),
-                None => match Registry::load().lookup("service", engine, &svc.version).and_then(|e| e.path.clone()) {
+                None => match Registry::load()
+                    .lookup("service", engine, &svc.version)
+                    .and_then(|e| e.path.clone())
+                {
                     Some(p) => println!("  {engine}: {p}"),
-                    None => println!("  {engine}: not registered (run `stack register service {engine} {} <path>`)", svc.version),
+                    None => println!(
+                        "  {engine}: not registered (run `stack register service {engine} {} <path>`)",
+                        svc.version
+                    ),
                 },
             }
             if let Some(home) = dirs::home_dir() {
-                println!("    data: {}", home.join(".stack").join("data").join(engine).join(&svc.version).display());
+                println!(
+                    "    data: {}",
+                    home.join(".stack")
+                        .join("data")
+                        .join(engine)
+                        .join(&svc.version)
+                        .display()
+                );
             }
         }
     }
@@ -812,8 +1020,14 @@ pub fn status() {
     println!("external runs: {}", state.external_runs.len());
     for (name, entry) in &state.external_runs {
         match &entry.domain {
-            Some(domain) => println!("  {name}: port={} (external — no process tracked, routes to http://{domain})", entry.port),
-            None => println!("  {name}: port={} (external — no process tracked)", entry.port),
+            Some(domain) => println!(
+                "  {name}: port={} (external — no process tracked, routes to http://{domain})",
+                entry.port
+            ),
+            None => println!(
+                "  {name}: port={} (external — no process tracked)",
+                entry.port
+            ),
         }
     }
     match caddy::status() {
@@ -823,7 +1037,12 @@ pub fn status() {
 }
 
 fn tracked_pids(state: &State) -> Vec<sysinfo::Pid> {
-    state.projects.values().chain(state.services.values()).map(|e| sysinfo::Pid::from_u32(e.pid)).collect()
+    state
+        .projects
+        .values()
+        .chain(state.services.values())
+        .map(|e| sysinfo::Pid::from_u32(e.pid))
+        .collect()
 }
 
 fn print_stats_table(sys: &sysinfo::System, state: &State) {
@@ -837,9 +1056,18 @@ fn print_stats_table(sys: &sysinfo::System, state: &State) {
         match sys.process(sysinfo::Pid::from_u32(entry.pid)) {
             Some(proc) => {
                 let mem_mb = proc.memory() as f64 / 1024.0 / 1024.0;
-                println!("{:<20} {:>8} {:>7.1}% {:>10.1}MB  ({kind})", name, entry.pid, proc.cpu_usage(), mem_mb);
+                println!(
+                    "{:<20} {:>8} {:>7.1}% {:>10.1}MB  ({kind})",
+                    name,
+                    entry.pid,
+                    proc.cpu_usage(),
+                    mem_mb
+                );
             }
-            None => println!("{:<20} {:>8} {:>8} {:>12}  ({kind}, no data)", name, entry.pid, "-", "-"),
+            None => println!(
+                "{:<20} {:>8} {:>8} {:>12}  ({kind}, no data)",
+                name, entry.pid, "-", "-"
+            ),
         }
     }
 }
@@ -883,7 +1111,10 @@ pub fn logs(name: Option<String>, follow: bool, tail: Option<usize>) -> Result<(
     let name = resolve_project_name(name)?;
     let log_file = process::log_path(&name);
     if !log_file.is_file() {
-        bail!("no log file for '{name}' (looked for {})", log_file.display());
+        bail!(
+            "no log file for '{name}' (looked for {})",
+            log_file.display()
+        );
     }
 
     let bytes = std::fs::read(&log_file).unwrap_or_default();
@@ -902,8 +1133,12 @@ pub fn logs(name: Option<String>, follow: bool, tail: Option<usize>) -> Result<(
         let mut pos = bytes.len() as u64;
         loop {
             std::thread::sleep(std::time::Duration::from_millis(300));
-            let Ok(mut file) = std::fs::File::open(&log_file) else { continue };
-            let Ok(metadata) = file.metadata() else { continue };
+            let Ok(mut file) = std::fs::File::open(&log_file) else {
+                continue;
+            };
+            let Ok(metadata) = file.metadata() else {
+                continue;
+            };
             let len = metadata.len();
             if len > pos {
                 let _ = file.seek(SeekFrom::Start(pos));
@@ -939,23 +1174,31 @@ mod tests {
     fn php_cgi_binary_swaps_filename_next_to_php_exe() {
         let php = PathBuf::from(r"C:\Users\test\.vfox\cache\php\v-8.4.23\php-8.4.23\php.exe");
         let cgi = php_cgi_binary(&php);
-        assert_eq!(cgi, PathBuf::from(r"C:\Users\test\.vfox\cache\php\v-8.4.23\php-8.4.23\php-cgi.exe"));
+        assert_eq!(
+            cgi,
+            PathBuf::from(r"C:\Users\test\.vfox\cache\php\v-8.4.23\php-8.4.23\php-cgi.exe")
+        );
     }
 
     #[test]
     fn detect_php_docroot_prefers_public_when_it_has_an_index() {
-        let dir = std::env::temp_dir().join(format!("stack-docroot-test-public-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("stack-docroot-test-public-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("public")).unwrap();
         std::fs::write(dir.join("public").join("index.php"), "<?php").unwrap();
 
-        assert_eq!(detect_php_docroot(&dir), dir.join("public").display().to_string());
+        assert_eq!(
+            detect_php_docroot(&dir),
+            dir.join("public").display().to_string()
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
     fn detect_php_docroot_falls_back_to_project_root_without_a_public_index() {
-        let dir = std::env::temp_dir().join(format!("stack-docroot-test-root-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("stack-docroot-test-root-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("index.php"), "<?php").unwrap();
 
@@ -966,7 +1209,10 @@ mod tests {
 
     #[test]
     fn shell_safe_path_is_noop_for_already_forward_slashed_paths() {
-        assert_eq!(shell_safe_path("C:/tools/mysqld.exe"), "C:/tools/mysqld.exe");
+        assert_eq!(
+            shell_safe_path("C:/tools/mysqld.exe"),
+            "C:/tools/mysqld.exe"
+        );
     }
 
     fn fake_project_entry(services: &[&str]) -> crate::core::state::ProcessEntry {
@@ -983,9 +1229,15 @@ mod tests {
     fn find_dependent_project_finds_another_project_still_using_the_service() {
         let mut projects = BTreeMap::new();
         projects.insert("project-a".to_string(), fake_project_entry(&["mysql@8.0"]));
-        projects.insert("project-b".to_string(), fake_project_entry(&["mysql@8.0", "redis@7.0"]));
+        projects.insert(
+            "project-b".to_string(),
+            fake_project_entry(&["mysql@8.0", "redis@7.0"]),
+        );
 
-        assert_eq!(find_dependent_project(&projects, "mysql@8.0"), Some("project-a"));
+        assert_eq!(
+            find_dependent_project(&projects, "mysql@8.0"),
+            Some("project-a")
+        );
     }
 
     #[test]

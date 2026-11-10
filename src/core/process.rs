@@ -1,6 +1,6 @@
-use anyhow::{Context, Result, anyhow};
 use crate::core::state::{ExternalRunEntry, ProcessEntry, State};
 use crate::platform;
+use anyhow::{Context, Result, anyhow};
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::path::{Path, PathBuf};
@@ -21,14 +21,19 @@ pub fn log_path(name: &str) -> PathBuf {
 pub fn spawn(runnable: &Runnable) -> Result<u32> {
     let parts = shell_words::split(runnable.resolved_command)
         .with_context(|| format!("could not parse command '{}'", runnable.resolved_command))?;
-    let (program, args) = parts.split_first().ok_or_else(|| anyhow!("command is empty"))?;
+    let (program, args) = parts
+        .split_first()
+        .ok_or_else(|| anyhow!("command is empty"))?;
 
     let log_file = log_path(runnable.name);
     if let Some(parent) = log_file.parent() {
         std::fs::create_dir_all(parent).context("failed to create log directory")?;
     }
-    let stdout_file = File::create(&log_file).with_context(|| format!("failed to create log file {}", log_file.display()))?;
-    let stderr_file = stdout_file.try_clone().context("failed to duplicate log file handle")?;
+    let stdout_file = File::create(&log_file)
+        .with_context(|| format!("failed to create log file {}", log_file.display()))?;
+    let stderr_file = stdout_file
+        .try_clone()
+        .context("failed to duplicate log file handle")?;
 
     let mut cmd = Command::new(program);
     cmd.args(args)
@@ -42,11 +47,19 @@ pub fn spawn(runnable: &Runnable) -> Result<u32> {
 
     platform::detach(&mut cmd);
 
-    let child = cmd.spawn().with_context(|| format!("failed to start '{}'", runnable.resolved_command))?;
+    let child = cmd
+        .spawn()
+        .with_context(|| format!("failed to start '{}'", runnable.resolved_command))?;
     Ok(child.id())
 }
 
-pub fn record_project(state: &mut State, name: &str, pid: u32, port: Option<u16>, services: Vec<String>) {
+pub fn record_project(
+    state: &mut State,
+    name: &str,
+    pid: u32,
+    port: Option<u16>,
+    services: Vec<String>,
+) {
     state.projects.insert(
         name.to_string(),
         ProcessEntry {
@@ -59,7 +72,13 @@ pub fn record_project(state: &mut State, name: &str, pid: u32, port: Option<u16>
     );
 }
 
-pub fn record_service(state: &mut State, key: &str, pid: u32, port: Option<u16>, data_dir: Option<String>) {
+pub fn record_service(
+    state: &mut State,
+    key: &str,
+    pid: u32,
+    port: Option<u16>,
+    data_dir: Option<String>,
+) {
     state.services.insert(
         key.to_string(),
         ProcessEntry {

@@ -35,16 +35,22 @@ pub fn is_alive(pid: u32) -> bool {
 pub fn install_pinned(tool: &str, version: &str) -> Result<()> {
     match tool {
         "vfox" => install_inno(
-            &format!("https://github.com/version-fox/vfox/releases/download/v{version}/vfox_{version}_windows_setup_x86_64.exe"),
+            &format!(
+                "https://github.com/version-fox/vfox/releases/download/v{version}/vfox_{version}_windows_setup_x86_64.exe"
+            ),
             "vfox",
         ),
         "uv" => install_portable_zip(
-            &format!("https://github.com/astral-sh/uv/releases/download/{version}/uv-x86_64-pc-windows-msvc.zip"),
+            &format!(
+                "https://github.com/astral-sh/uv/releases/download/{version}/uv-x86_64-pc-windows-msvc.zip"
+            ),
             "uv",
             version,
         ),
         "caddy" => install_portable_zip(
-            &format!("https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_windows_amd64.zip"),
+            &format!(
+                "https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_windows_amd64.zip"
+            ),
             "caddy",
             version,
         ),
@@ -55,8 +61,10 @@ pub fn install_pinned(tool: &str, version: &str) -> Result<()> {
 fn download(url: &str, dest: &std::path::Path) -> Result<()> {
     println!("  downloading {url}");
     let response = ureq::get(url).call().context("download failed")?;
-    let mut file = std::fs::File::create(dest).with_context(|| format!("failed to create {}", dest.display()))?;
-    std::io::copy(&mut response.into_body().into_reader(), &mut file).context("failed to write download")?;
+    let mut file = std::fs::File::create(dest)
+        .with_context(|| format!("failed to create {}", dest.display()))?;
+    std::io::copy(&mut response.into_body().into_reader(), &mut file)
+        .context("failed to write download")?;
     Ok(())
 }
 
@@ -75,9 +83,11 @@ fn install_inno(url: &str, name: &str) -> Result<()> {
 }
 
 fn install_portable_zip(url: &str, name: &str, version: &str) -> Result<()> {
-    let base = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("could not resolve home directory"))?;
+    let base =
+        dirs::home_dir().ok_or_else(|| anyhow::anyhow!("could not resolve home directory"))?;
     let install_dir = base.join(".stack").join("tools").join(name).join(version);
-    std::fs::create_dir_all(&install_dir).with_context(|| format!("failed to create {}", install_dir.display()))?;
+    std::fs::create_dir_all(&install_dir)
+        .with_context(|| format!("failed to create {}", install_dir.display()))?;
 
     let zip_path = std::env::temp_dir().join(format!("{name}-{version}.zip"));
     download(url, &zip_path)?;
@@ -111,32 +121,45 @@ fn install_portable_zip(url: &str, name: &str, version: &str) -> Result<()> {
         }
     }
 
-    println!("  {name} {version} is at {} (not yet wired onto PATH — resolution is a separate step)", install_dir.display());
+    println!(
+        "  {name} {version} is at {} (not yet wired onto PATH — resolution is a separate step)",
+        install_dir.display()
+    );
     Ok(())
 }
 
 fn user_environment_key() -> Result<RegKey> {
-    RegKey::predef(HKEY_CURRENT_USER).open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE).context("failed to open HKCU\\Environment")
+    RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey_with_flags("Environment", KEY_READ | KEY_WRITE)
+        .context("failed to open HKCU\\Environment")
 }
 
 fn read_persistent_path() -> Result<String> {
-    Ok(user_environment_key()?.get_value("Path").unwrap_or_default())
+    Ok(user_environment_key()?
+        .get_value("Path")
+        .unwrap_or_default())
 }
 
 /// Preserves the existing registry type of `Path` (normally REG_EXPAND_SZ).
 fn write_persistent_path(path: &str) -> Result<()> {
     let key = user_environment_key()?;
-    let vtype = key.get_raw_value("Path").map(|v| v.vtype).unwrap_or(REG_EXPAND_SZ);
+    let vtype = key
+        .get_raw_value("Path")
+        .map(|v| v.vtype)
+        .unwrap_or(REG_EXPAND_SZ);
     let mut value = path.to_reg_value();
     value.vtype = vtype;
-    key.set_raw_value("Path", &value).context("failed to write HKCU\\Environment\\Path")
+    key.set_raw_value("Path", &value)
+        .context("failed to write HKCU\\Environment\\Path")
 }
 
 /// Removes `remove` from the persistent user PATH, then prepends `add`, deduplicated.
 pub fn update_persistent_path(remove: &[String], add: &[String]) -> Result<()> {
     let current = read_persistent_path()?;
-    let mut components: Vec<String> =
-        std::env::split_paths(&current).map(|p| p.to_string_lossy().into_owned()).filter(|c| !remove.iter().any(|r| r.eq_ignore_ascii_case(c))).collect();
+    let mut components: Vec<String> = std::env::split_paths(&current)
+        .map(|p| p.to_string_lossy().into_owned())
+        .filter(|c| !remove.iter().any(|r| r.eq_ignore_ascii_case(c)))
+        .collect();
 
     for dir in add.iter().rev() {
         if !components.iter().any(|c| c.eq_ignore_ascii_case(dir)) {

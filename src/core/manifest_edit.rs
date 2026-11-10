@@ -1,4 +1,3 @@
-
 use anyhow::{Context, Result, anyhow, bail};
 use std::path::Path;
 use toml_edit::{DocumentMut, Item, Table, table, value};
@@ -31,21 +30,32 @@ fn ensure_subtable<'a>(parent: &'a mut Table, key: &str) -> Result<&'a mut Table
 }
 
 fn load(manifest_path: &Path) -> Result<DocumentMut> {
-    let text = std::fs::read_to_string(manifest_path).with_context(|| format!("failed to read {}", manifest_path.display()))?;
+    let text = std::fs::read_to_string(manifest_path)
+        .with_context(|| format!("failed to read {}", manifest_path.display()))?;
     text.parse().context("failed to parse stack.toml")
 }
 
 fn save(manifest_path: &Path, doc: &DocumentMut) -> Result<()> {
-    std::fs::write(manifest_path, doc.to_string()).with_context(|| format!("failed to write {}", manifest_path.display()))
+    std::fs::write(manifest_path, doc.to_string())
+        .with_context(|| format!("failed to write {}", manifest_path.display()))
 }
 
-pub fn add(manifest_path: &Path, kind: &str, name: &str, version: Option<&str>, extra: &AddArgs) -> Result<()> {
+pub fn add(
+    manifest_path: &Path,
+    kind: &str,
+    name: &str,
+    version: Option<&str>,
+    extra: &AddArgs,
+) -> Result<()> {
     let mut doc = load(manifest_path)?;
     let root = doc.as_table_mut();
 
     match kind {
         "language" => {
-            let needs_detailed = extra.manager.is_some() || extra.plugin.is_some() || extra.binary.is_some() || extra.path.is_some();
+            let needs_detailed = extra.manager.is_some()
+                || extra.plugin.is_some()
+                || extra.binary.is_some()
+                || extra.path.is_some();
             let table = ensure_subtable(root, "language")?;
             if needs_detailed {
                 let entry = ensure_subtable(table, name)?;
@@ -65,7 +75,9 @@ pub fn add(manifest_path: &Path, kind: &str, name: &str, version: Option<&str>, 
                     entry.insert("path", value(p.as_str()));
                 }
             } else {
-                let v = version.ok_or_else(|| anyhow!("stack add language <name> <version> (or pass --path for a BYO binary)"))?;
+                let v = version.ok_or_else(|| {
+                    anyhow!("stack add language <name> <version> (or pass --path for a BYO binary)")
+                })?;
                 table.insert(name, value(v));
             }
         }
@@ -88,12 +100,17 @@ pub fn add(manifest_path: &Path, kind: &str, name: &str, version: Option<&str>, 
             }
         }
         "tool" => {
-            let path = extra.path.as_deref().ok_or_else(|| anyhow!("stack add tool <name> --path <path>"))?;
+            let path = extra
+                .path
+                .as_deref()
+                .ok_or_else(|| anyhow!("stack add tool <name> --path <path>"))?;
             let tools = ensure_subtable(root, "tool")?;
             let entry = ensure_subtable(tools, name)?;
             entry.insert("path", value(path));
         }
-        "clone" => bail!("stack add clone isn't supported yet — hand-edit [[clone]] in stack.toml directly for now"),
+        "clone" => bail!(
+            "stack add clone isn't supported yet — hand-edit [[clone]] in stack.toml directly for now"
+        ),
         other => bail!("unknown kind '{other}' — supported: language, service, tool"),
     }
 
@@ -102,7 +119,9 @@ pub fn add(manifest_path: &Path, kind: &str, name: &str, version: Option<&str>, 
 
 pub fn remove(manifest_path: &Path, kind: &str, name: &str) -> Result<()> {
     if kind == "clone" {
-        bail!("stack remove clone isn't supported yet — hand-edit [[clone]] in stack.toml directly for now");
+        bail!(
+            "stack remove clone isn't supported yet — hand-edit [[clone]] in stack.toml directly for now"
+        );
     }
     if !matches!(kind, "language" | "service" | "tool") {
         bail!("unknown kind '{kind}' — supported: language, service, tool");

@@ -1,6 +1,10 @@
 use std::collections::BTreeMap;
 
-pub fn resolve(template: &str, reserved: &BTreeMap<String, String>, allow_prompt: bool) -> Result<String, Vec<String>> {
+pub fn resolve(
+    template: &str,
+    reserved: &BTreeMap<String, String>,
+    allow_prompt: bool,
+) -> Result<String, Vec<String>> {
     let names = extract_names(template);
 
     let mut resolved: BTreeMap<String, String> = BTreeMap::new();
@@ -22,7 +26,9 @@ pub fn resolve(template: &str, reserved: &BTreeMap<String, String>, allow_prompt
         }
         for name in &missing {
             let value = prompt_for(name);
-            println!("tip: set {name} in your environment, or `stack load-env`, to skip this prompt next time");
+            println!(
+                "tip: set {name} in your environment, or `stack load-env`, to skip this prompt next time"
+            );
             resolved.insert(name.clone(), value);
         }
     }
@@ -97,6 +103,9 @@ mod tests {
     #[test]
     fn missing_without_prompt_reports_all_at_once() {
         let err = resolve("{FIRST_MISSING} {SECOND_MISSING}", &BTreeMap::new(), false).unwrap_err();
-        assert_eq!(err, vec!["FIRST_MISSING".to_string(), "SECOND_MISSING".to_string()]);
+        assert_eq!(
+            err,
+            vec!["FIRST_MISSING".to_string(), "SECOND_MISSING".to_string()]
+        );
     }
 }

@@ -1,6 +1,6 @@
-use anyhow::{Context, Result, anyhow, bail};
 use crate::core::manifest::Language;
 use crate::core::registry::Registry;
+use anyhow::{Context, Result, anyhow, bail};
 use std::cmp::Ordering;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -48,7 +48,13 @@ fn vfox_find_installed(plugin: &str, version: &str) -> Result<PathBuf, Lookup> {
             let resolved = vfox_installed_versions(plugin)
                 .into_iter()
                 .filter(|installed| version_matches_prefix(installed, version))
-                .reduce(|best, candidate| if compare_versions(&candidate, &best) == Ordering::Greater { candidate } else { best });
+                .reduce(|best, candidate| {
+                    if compare_versions(&candidate, &best) == Ordering::Greater {
+                        candidate
+                    } else {
+                        best
+                    }
+                });
             match resolved {
                 Some(exact) => vfox_version_dir(plugin, &exact),
                 None => Err(Lookup::NotInstalled),
@@ -66,14 +72,22 @@ fn vfox_installed_versions(plugin: &str) -> Vec<String> {
     }
     String::from_utf8_lossy(&output.stdout)
         .lines()
-        .map(|line| line.trim().trim_start_matches(|c: char| c == '-' || c == '>' || c == '*' || c.is_whitespace()).trim().to_string())
+        .map(|line| {
+            line.trim()
+                .trim_start_matches(|c: char| c == '-' || c == '>' || c == '*' || c.is_whitespace())
+                .trim()
+                .to_string()
+        })
         .filter(|v| !v.is_empty())
         .collect()
 }
 
 /// True if `installed` is `requested` itself, or a dotted/hyphenated prefix of it.
 fn version_matches_prefix(installed: &str, requested: &str) -> bool {
-    installed == requested || installed.strip_prefix(requested).is_some_and(|rest| rest.starts_with('.') || rest.starts_with('-'))
+    installed == requested
+        || installed
+            .strip_prefix(requested)
+            .is_some_and(|rest| rest.starts_with('.') || rest.starts_with('-'))
 }
 
 fn compare_versions(a: &str, b: &str) -> Ordering {
@@ -93,7 +107,17 @@ fn compare_versions(a: &str, b: &str) -> Ordering {
 
 /// Curated set of extensions official PHP-for-Windows builds ship disabled that a
 /// local dev app is likely to need — not "enable everything".
-const PHP_FRESH_INSTALL_EXTENSIONS: &[&str] = &["pdo_mysql", "pdo_sqlite", "pdo_pgsql", "pgsql", "ldap", "fileinfo", "sockets", "sodium", "bz2"];
+const PHP_FRESH_INSTALL_EXTENSIONS: &[&str] = &[
+    "pdo_mysql",
+    "pdo_sqlite",
+    "pdo_pgsql",
+    "pgsql",
+    "ldap",
+    "fileinfo",
+    "sockets",
+    "sodium",
+    "bz2",
+];
 
 /// Patches a freshly-downloaded php.ini's content in memory. `opcache_dll_present` must
 /// reflect whether ext/php_opcache.dll exists, since PHP 8.5+ builds OPcache into core
@@ -105,13 +129,28 @@ fn patch_php_ini_content(content: &str, opcache_dll_present: bool) -> String {
             .iter()
             .find(|ext| line == format!(";extension={ext}"))
             .map(|ext| format!("extension={ext}"))
-            .or_else(|| (opcache_dll_present && line == ";zend_extension=opcache").then(|| "zend_extension=opcache".to_string()))
+            .or_else(|| {
+                (opcache_dll_present && line == ";zend_extension=opcache")
+                    .then(|| "zend_extension=opcache".to_string())
+            })
             .or_else(|| (line == ";opcache.enable=1").then(|| "opcache.enable=1".to_string()))
             // .or_else(|| (line == ";opcache.enable_cli=0").then(|| "opcache.enable_cli=1".to_string()))
-            .or_else(|| line.starts_with(";date.timezone").then(|| "date.timezone = UTC".to_string()))
-            .or_else(|| line.starts_with("memory_limit = ").then(|| "memory_limit = 512M".to_string()))
-            .or_else(|| line.starts_with("upload_max_filesize = ").then(|| "upload_max_filesize = 64M".to_string()))
-            .or_else(|| line.starts_with("post_max_size = ").then(|| "post_max_size = 64M".to_string()));
+            .or_else(|| {
+                line.starts_with(";date.timezone")
+                    .then(|| "date.timezone = UTC".to_string())
+            })
+            .or_else(|| {
+                line.starts_with("memory_limit = ")
+                    .then(|| "memory_limit = 512M".to_string())
+            })
+            .or_else(|| {
+                line.starts_with("upload_max_filesize = ")
+                    .then(|| "upload_max_filesize = 64M".to_string())
+            })
+            .or_else(|| {
+                line.starts_with("post_max_size = ")
+                    .then(|| "post_max_size = 64M".to_string())
+            });
         out.push_str(patched.as_deref().unwrap_or(line));
         out.push('\n');
     }
@@ -126,14 +165,20 @@ fn configure_fresh_php_install(install_dir: &Path) {
     let content = match std::fs::read_to_string(&ini_path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("warning: could not configure fresh PHP install ({}): {e:#}", ini_path.display());
+            eprintln!(
+                "warning: could not configure fresh PHP install ({}): {e:#}",
+                ini_path.display()
+            );
             return;
         }
     };
     let opcache_dll_present = install_dir.join("ext").join("php_opcache.dll").is_file();
     let patched = patch_php_ini_content(&content, opcache_dll_present);
     if let Err(e) = std::fs::write(&ini_path, patched) {
-        eprintln!("warning: could not write configured php.ini ({}): {e:#}", ini_path.display());
+        eprintln!(
+            "warning: could not write configured php.ini ({}): {e:#}",
+            ini_path.display()
+        );
     }
 }
 
@@ -144,7 +189,9 @@ fn vfox_install(plugin: &str, version: &str) -> Result<()> {
         .status()
         .context("failed to run vfox install")?;
     if !status.success() {
-        bail!("vfox install {plugin}@{version} failed — run `vfox search {plugin}` to see available versions");
+        bail!(
+            "vfox install {plugin}@{version} failed — run `vfox search {plugin}` to see available versions"
+        );
     }
     Ok(())
 }
@@ -171,7 +218,8 @@ fn vfox_resolve(plugin: &str, version: &str, binary_name: &str) -> Result<PathBu
             dir
         }
     };
-    find_binary(&dir, binary_name).ok_or_else(|| anyhow!("{binary_name} not found under {}", dir.display()))
+    find_binary(&dir, binary_name)
+        .ok_or_else(|| anyhow!("{binary_name} not found under {}", dir.display()))
 }
 
 fn find_binary(dir: &Path, binary_name: &str) -> Option<PathBuf> {
@@ -208,8 +256,15 @@ fn default_vfox_plugin(name: &str) -> Option<&'static str> {
 }
 
 fn vfox_plugin_and_binary(name: &str, entry: &Language) -> (String, String) {
-    let plugin = entry.plugin().or_else(|| default_vfox_plugin(name)).unwrap_or(name).to_string();
-    let binary = entry.binary().map_or_else(|| format!("{name}{}", std::env::consts::EXE_SUFFIX), str::to_string);
+    let plugin = entry
+        .plugin()
+        .or_else(|| default_vfox_plugin(name))
+        .unwrap_or(name)
+        .to_string();
+    let binary = entry.binary().map_or_else(
+        || format!("{name}{}", std::env::consts::EXE_SUFFIX),
+        str::to_string,
+    );
     (plugin, binary)
 }
 
@@ -222,12 +277,19 @@ pub fn resolve(name: &str, entry: &Language) -> Result<PathBuf> {
         };
     }
 
-    let version = entry.version().ok_or_else(|| anyhow!("[language.{name}] needs either `version` or `path`"))?;
+    let version = entry
+        .version()
+        .ok_or_else(|| anyhow!("[language.{name}] needs either `version` or `path`"))?;
 
     let Some(manager) = entry.manager().or_else(|| default_manager(name)) else {
-        return match Registry::load().lookup("language", name, version).and_then(|e| e.path.clone()) {
+        return match Registry::load()
+            .lookup("language", name, version)
+            .and_then(|e| e.path.clone())
+        {
             Some(registered) if Path::new(&registered).is_file() => Ok(PathBuf::from(registered)),
-            Some(registered) => Err(anyhow!("[language.{name}] registered path no longer exists: {registered}")),
+            Some(registered) => Err(anyhow!(
+                "[language.{name}] registered path no longer exists: {registered}"
+            )),
             None => Err(anyhow!(
                 "[language.{name}] has no known default manager — set `manager` explicitly (supported: vfox, uv), or register a BYO path via `stack register language {name} {version} <path>`"
             )),
@@ -246,7 +308,11 @@ pub fn resolve(name: &str, entry: &Language) -> Result<PathBuf> {
 
 pub fn lookup(name: &str, entry: &Language) -> Option<PathBuf> {
     if let Some(path) = entry.path() {
-        return if Path::new(path).is_file() { Some(PathBuf::from(path)) } else { None };
+        return if Path::new(path).is_file() {
+            Some(PathBuf::from(path))
+        } else {
+            None
+        };
     }
 
     let version = entry.version()?;
@@ -258,7 +324,11 @@ pub fn lookup(name: &str, entry: &Language) -> Option<PathBuf> {
         }
         Some("uv") => uv_python_find(version).ok(),
         Some(_) => None,
-        None => Registry::load().lookup("language", name, version).and_then(|e| e.path.clone()).map(PathBuf::from).filter(|p| p.is_file()),
+        None => Registry::load()
+            .lookup("language", name, version)
+            .and_then(|e| e.path.clone())
+            .map(PathBuf::from)
+            .filter(|p| p.is_file()),
     }
 }
 
@@ -281,7 +351,9 @@ fn uv_resolve(version: &str) -> Result<PathBuf> {
     match uv_python_find(version) {
         Ok(path) => Ok(path),
         Err(Lookup::NotRunnable(msg)) => Err(anyhow!("{msg}")),
-        Err(Lookup::NotInstalled) => Err(anyhow!("uv could not resolve python {version} after install")),
+        Err(Lookup::NotInstalled) => Err(anyhow!(
+            "uv could not resolve python {version} after install"
+        )),
     }
 }
 
@@ -350,27 +422,44 @@ mod tests {
         let ini = ";extension=pdo_mysql\n;extension=pdo_sqlite\n;extension=pdo_pgsql\n;extension=pgsql\n;extension=ldap\n;extension=fileinfo\n;extension=sockets\n;extension=sodium\n;extension=bz2\n;extension=snmp\n";
         let patched = patch_php_ini_content(ini, false);
         for ext in PHP_FRESH_INSTALL_EXTENSIONS {
-            assert!(patched.contains(&format!("extension={ext}\n")) && !patched.contains(&format!(";extension={ext}\n")), "expected {ext} to be enabled");
+            assert!(
+                patched.contains(&format!("extension={ext}\n"))
+                    && !patched.contains(&format!(";extension={ext}\n")),
+                "expected {ext} to be enabled"
+            );
         }
-        assert!(patched.contains(";extension=snmp"), "extensions outside the curated list must stay untouched");
+        assert!(
+            patched.contains(";extension=snmp"),
+            "extensions outside the curated list must stay untouched"
+        );
     }
 
     #[test]
     fn patch_php_ini_content_enables_opcache_only_when_dll_present() {
         let ini = ";zend_extension=opcache\n;opcache.enable=1\n;opcache.enable_cli=0\n";
         let with_dll = patch_php_ini_content(ini, true);
-        assert!(with_dll.contains("zend_extension=opcache\n") && !with_dll.contains(";zend_extension=opcache"));
+        assert!(
+            with_dll.contains("zend_extension=opcache\n")
+                && !with_dll.contains(";zend_extension=opcache")
+        );
         assert!(with_dll.contains("opcache.enable=1\n") && !with_dll.contains(";opcache.enable=1"));
         // assert!(with_dll.contains("opcache.enable_cli=1\n"), "opcache.enable_cli should flip to 1 (was disabled at 0)");
 
         let without_dll = patch_php_ini_content(ini, false);
-        assert!(without_dll.contains(";zend_extension=opcache\n"), "must not uncomment a load directive for a DLL that doesn't exist (PHP 8.5+ builds OPcache into core)");
-        assert!(without_dll.contains("opcache.enable=1\n"), "opcache.enable/enable_cli still apply even when OPcache is built-in, not a loadable module");
+        assert!(
+            without_dll.contains(";zend_extension=opcache\n"),
+            "must not uncomment a load directive for a DLL that doesn't exist (PHP 8.5+ builds OPcache into core)"
+        );
+        assert!(
+            without_dll.contains("opcache.enable=1\n"),
+            "opcache.enable/enable_cli still apply even when OPcache is built-in, not a loadable module"
+        );
     }
 
     #[test]
     fn patch_php_ini_content_sets_dev_friendly_ini_values() {
-        let ini = ";date.timezone =\nmemory_limit = 128M\nupload_max_filesize = 2M\npost_max_size = 8M\n";
+        let ini =
+            ";date.timezone =\nmemory_limit = 128M\nupload_max_filesize = 2M\npost_max_size = 8M\n";
         let patched = patch_php_ini_content(ini, false);
         assert!(patched.contains("date.timezone = UTC\n"));
         assert!(patched.contains("memory_limit = 512M\n"));
@@ -380,7 +469,8 @@ mod tests {
 
     #[test]
     fn patch_php_ini_content_leaves_unrelated_lines_untouched() {
-        let ini = "[PHP]\nerror_reporting = E_ALL\ndisplay_errors = On\n; a comment\nextension=openssl\n";
+        let ini =
+            "[PHP]\nerror_reporting = E_ALL\ndisplay_errors = On\n; a comment\nextension=openssl\n";
         assert_eq!(patch_php_ini_content(ini, false), ini);
     }
 }
