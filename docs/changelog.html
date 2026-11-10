@@ -43,6 +43,20 @@ main { padding-block: var(--space-8); }
     <p class="lead">Per-version entries below. v0.1.0's initial feature set is grouped by area rather than as a flat commit list.</p>
 
     <div class="entry">
+      <span class="entry-tag">v0.2.3 — 2026-11-10</span>
+      <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.2.3" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>. <code>stack describe</code> now works outside a project, and fresh PHP installs come with the extensions most frameworks expect.</p>
+      <h2>Added</h2>
+      <ul>
+        <li><code>stack describe -p/--profile &lt;name&gt;</code> — describe a profile instead of a project. Takes precedence inside a project; can't be combined with a project name.</li>
+      </ul>
+      <h2>Fixed</h2>
+      <ul>
+        <li><code>stack describe</code> outside a project now describes the default profile instead of failing. It only errors when there's neither a <code>stack.toml</code> nor a default profile.</li>
+        <li>Fresh PHP installs now also enable <code>openssl</code>, <code>curl</code>, <code>mbstring</code>, <code>zip</code>, <code>intl</code>, <code>gd</code>, <code>mysqli</code>, <code>exif</code> and <code>sqlite3</code>, each only when its DLL ships in <code>ext/</code>. An existing install's <code>php.ini</code> is left as is.</li>
+      </ul>
+    </div>
+
+    <div class="entry">
       <span class="entry-tag">v0.2.2 — 2026-08-04</span>
       <p style="font-size:13px;opacity:0.75;margin:0 0 var(--space-3);"><a href="https://github.com/sanayasfp/stack/releases/tag/v0.2.2" target="_blank" rel="noopener">Release notes and downloads on GitHub</a>. New manifest features from real dogfooding, plus a proper <code>activate</code>/<code>deactivate</code> pair for projects.</p>
       <h2>Added</h2>
