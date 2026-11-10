@@ -116,9 +116,9 @@
     </div>
 
     <div class="cmd">
-      <h3><code>stack describe [name]</code></h3>
-      <p>Prints everything stack knows about a project's resolved environment: the manifest and project directory paths, whether it's currently running, its log file location, resolved binary paths per language (<code>php.exe</code>, and for PHP specifically also <code>php.ini</code> and <code>php-cgi.exe</code>, sitting right next to it), each service's binary/data-dir path or <code>external (BYO)</code>, and resolved tool paths.</p>
-      <dl class="flags"><dt><code>name</code></dt><dd>Name of the project to describe; omit to describe the current directory's project. Resolves the same path-then-name way <code>stack up</code>'s target does.</dd></dl>
+      <h3><code>stack describe [name] [-p, --profile &lt;name&gt;]</code></h3>
+      <p>Prints everything stack knows about a project's resolved environment: the manifest and project directory paths, whether it's currently running, its log file location, resolved binary paths per language (<code>php.exe</code>, and for PHP specifically also <code>php.ini</code> and <code>php-cgi.exe</code>, sitting right next to it), each service's binary/data-dir path or <code>external (BYO)</code>, and resolved tool paths. Outside a project (no <code>stack.toml</code> in the directory or any parent), it describes the default profile instead; <code>--profile</code> takes precedence even inside a project.</p>
+      <dl class="flags"><dt><code>name</code></dt><dd>Name of the project to describe; omit to describe the current directory's project. Resolves the same path-then-name way <code>stack up</code>'s target does.</dd><dt><code>-p, --profile &lt;name&gt;</code></dt><dd>Describe this profile instead of a project; can't be combined with <code>name</code>.</dd></dl>
       <p style="font-size:13px;opacity:0.75;">Pure toolchain resolution — nothing is spawned, so it works whether the project is up or down.</p>
     </div>
 
