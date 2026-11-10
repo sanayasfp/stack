@@ -93,17 +93,20 @@ fn compare_versions(a: &str, b: &str) -> Ordering {
 
 /// Curated set of extensions official PHP-for-Windows builds ship disabled that a
 /// local dev app is likely to need — not "enable everything".
-const PHP_FRESH_INSTALL_EXTENSIONS: &[&str] = &["pdo_mysql", "pdo_sqlite", "pdo_pgsql", "pgsql", "ldap", "fileinfo", "sockets", "sodium", "bz2"];
+const PHP_FRESH_INSTALL_EXTENSIONS: &[&str] = &[
+    "openssl", "curl", "mbstring", "zip", "intl", "gd", "mysqli", "exif", "sqlite3", "pdo_mysql", "pdo_sqlite", "pdo_pgsql", "pgsql", "ldap", "fileinfo", "sockets", "sodium", "bz2",
+];
 
 /// Patches a freshly-downloaded php.ini's content in memory. `opcache_dll_present` must
 /// reflect whether ext/php_opcache.dll exists, since PHP 8.5+ builds OPcache into core
-/// and ships no DLL or `zend_extension=opcache` line to uncomment.
-fn patch_php_ini_content(content: &str, opcache_dll_present: bool) -> String {
+/// and ships no DLL or `zend_extension=opcache` line to uncomment. `ext_dll_present` reports
+/// whether ext/php_<name>.dll exists; curated extensions without a DLL stay commented.
+fn patch_php_ini_content(content: &str, opcache_dll_present: bool, ext_dll_present: &dyn Fn(&str) -> bool) -> String {
     let mut out = String::with_capacity(content.len());
     for line in content.lines() {
         let patched = PHP_FRESH_INSTALL_EXTENSIONS
             .iter()
-            .find(|ext| line == format!(";extension={ext}"))
+            .find(|ext| line == format!(";extension={ext}") && ext_dll_present(ext))
             .map(|ext| format!("extension={ext}"))
             .or_else(|| (opcache_dll_present && line == ";zend_extension=opcache").then(|| "zend_extension=opcache".to_string()))
             .or_else(|| (line == ";opcache.enable=1").then(|| "opcache.enable=1".to_string()))
@@ -130,8 +133,9 @@ fn configure_fresh_php_install(install_dir: &Path) {
             return;
         }
     };
-    let opcache_dll_present = install_dir.join("ext").join("php_opcache.dll").is_file();
-    let patched = patch_php_ini_content(&content, opcache_dll_present);
+    let ext_dir = install_dir.join("ext");
+    let opcache_dll_present = ext_dir.join("php_opcache.dll").is_file();
+    let patched = patch_php_ini_content(&content, opcache_dll_present, &|ext| ext_dir.join(format!("php_{ext}.dll")).is_file());
     if let Err(e) = std::fs::write(&ini_path, patched) {
         eprintln!("warning: could not write configured php.ini ({}): {e:#}", ini_path.display());
     }
@@ -345,25 +349,54 @@ mod tests {
         assert_eq!(compare_versions("8.4.0-nts", "8.4.0-nts"), Ordering::Equal);
     }
 
+    fn all_present(_: &str) -> bool {
+        true
+    }
+
     #[test]
     fn patch_php_ini_content_enables_the_curated_extension_list() {
-        let ini = ";extension=pdo_mysql\n;extension=pdo_sqlite\n;extension=pdo_pgsql\n;extension=pgsql\n;extension=ldap\n;extension=fileinfo\n;extension=sockets\n;extension=sodium\n;extension=bz2\n;extension=snmp\n";
-        let patched = patch_php_ini_content(ini, false);
+        let mut ini: String = PHP_FRESH_INSTALL_EXTENSIONS.iter().map(|e| format!(";extension={e}\n")).collect();
+        ini.push_str(";extension=snmp\n;extension=soap\n;extension=ffi\n");
+        let patched = patch_php_ini_content(&ini, false, &all_present);
         for ext in PHP_FRESH_INSTALL_EXTENSIONS {
-            assert!(patched.contains(&format!("extension={ext}\n")) && !patched.contains(&format!(";extension={ext}\n")), "expected {ext} to be enabled");
+            assert!(patched.contains(&format!("\nextension={ext}\n")) || patched.starts_with(&format!("extension={ext}\n")), "expected {ext} to be enabled");
+            assert!(!patched.contains(&format!(";extension={ext}\n")), "{ext} still commented");
         }
-        assert!(patched.contains(";extension=snmp"), "extensions outside the curated list must stay untouched");
+        for ext in ["snmp", "soap", "ffi"] {
+            assert!(patched.contains(&format!(";extension={ext}\n")), "{ext} is outside the curated list and must stay untouched");
+        }
+    }
+
+    #[test]
+    fn patch_php_ini_content_leaves_extension_commented_when_dll_absent() {
+        let ini = ";extension=curl\n;extension=gd\n";
+        let patched = patch_php_ini_content(ini, false, &|ext| ext == "curl");
+        assert_eq!(patched, "extension=curl\n;extension=gd\n");
+    }
+
+    #[test]
+    fn patch_php_ini_content_keeps_exif_after_mbstring() {
+        let ini = ";extension=mbstring\n;extension=exif\n";
+        let patched = patch_php_ini_content(ini, false, &all_present);
+        assert_eq!(patched, "extension=mbstring\nextension=exif\n");
+    }
+
+    #[test]
+    fn patch_php_ini_content_does_not_duplicate_already_enabled_openssl() {
+        let ini = "extension=openssl\n;extension=curl\n";
+        let patched = patch_php_ini_content(ini, false, &all_present);
+        assert_eq!(patched, "extension=openssl\nextension=curl\n");
     }
 
     #[test]
     fn patch_php_ini_content_enables_opcache_only_when_dll_present() {
         let ini = ";zend_extension=opcache\n;opcache.enable=1\n;opcache.enable_cli=0\n";
-        let with_dll = patch_php_ini_content(ini, true);
+        let with_dll = patch_php_ini_content(ini, true, &all_present);
         assert!(with_dll.contains("zend_extension=opcache\n") && !with_dll.contains(";zend_extension=opcache"));
         assert!(with_dll.contains("opcache.enable=1\n") && !with_dll.contains(";opcache.enable=1"));
         // assert!(with_dll.contains("opcache.enable_cli=1\n"), "opcache.enable_cli should flip to 1 (was disabled at 0)");
 
-        let without_dll = patch_php_ini_content(ini, false);
+        let without_dll = patch_php_ini_content(ini, false, &all_present);
         assert!(without_dll.contains(";zend_extension=opcache\n"), "must not uncomment a load directive for a DLL that doesn't exist (PHP 8.5+ builds OPcache into core)");
         assert!(without_dll.contains("opcache.enable=1\n"), "opcache.enable/enable_cli still apply even when OPcache is built-in, not a loadable module");
     }
@@ -371,7 +404,7 @@ mod tests {
     #[test]
     fn patch_php_ini_content_sets_dev_friendly_ini_values() {
         let ini = ";date.timezone =\nmemory_limit = 128M\nupload_max_filesize = 2M\npost_max_size = 8M\n";
-        let patched = patch_php_ini_content(ini, false);
+        let patched = patch_php_ini_content(ini, false, &all_present);
         assert!(patched.contains("date.timezone = UTC\n"));
         assert!(patched.contains("memory_limit = 512M\n"));
         assert!(patched.contains("upload_max_filesize = 64M\n"));
@@ -381,6 +414,6 @@ mod tests {
     #[test]
     fn patch_php_ini_content_leaves_unrelated_lines_untouched() {
         let ini = "[PHP]\nerror_reporting = E_ALL\ndisplay_errors = On\n; a comment\nextension=openssl\n";
-        assert_eq!(patch_php_ini_content(ini, false), ini);
+        assert_eq!(patch_php_ini_content(ini, false, &all_present), ini);
     }
 }
