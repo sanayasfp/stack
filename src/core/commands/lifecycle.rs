@@ -1,5 +1,6 @@
 use anyhow::{Context, Result, anyhow, bail};
 use crate::core::caddy;
+use crate::core::commands::profile;
 use crate::core::commands::shared::{self, resolve_tool};
 use crate::core::manifest::{self, CloneEntry, Manifest, Service};
 use crate::core::process::{self, Runnable};
@@ -723,7 +724,16 @@ pub fn restart(project: Option<String>, all: bool, auto_yes: bool) -> Result<()>
 pub fn describe(target: Option<String>) -> Result<()> {
     let (path, manifest) = match &target {
         Some(name) => resolve_up_target(name)?,
-        None => Manifest::find_and_load(Path::new("."))?,
+        None => match Manifest::find_and_load(Path::new(".")) {
+            Ok(found) => found,
+            Err(e) if e.downcast_ref::<manifest::ManifestNotFound>().is_some() => {
+                return match profile::default_profile_name() {
+                    Some(name) => profile::describe(&name),
+                    None => Err(anyhow!("{e} (or set a default profile / pass --profile)")),
+                };
+            }
+            Err(e) => return Err(e),
+        },
     };
     let project_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
 
