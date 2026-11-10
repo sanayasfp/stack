@@ -228,23 +228,22 @@ fn start_service_if_needed(
     svc.validate(engine)?;
     let state_key = format!("{engine}@{}", svc.version);
 
-    if let Some(entry) = state.services.get(&state_key) {
-        if platform::is_alive(entry.pid) {
-            if let Some(port) = entry.port {
-                match svc.resolve_port(engine, allow_prompt) {
-                    Ok(Some(declared)) if declared != port => {
-                        println!(
-                            "  service.{engine}: warning — stack.toml declares port {declared} but the running instance is on {port} (run `stack down --all` then `stack up` to pick up the new value)"
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(e) => println!(
-                        "  service.{engine}: warning — could not resolve declared port: {e:#}"
-                    ),
-                }
-                return Ok((entry.pid, port, false));
+    if let Some(entry) = state.services.get(&state_key)
+        && platform::is_alive(entry.pid)
+        && let Some(port) = entry.port
+    {
+        match svc.resolve_port(engine, allow_prompt) {
+            Ok(Some(declared)) if declared != port => {
+                println!(
+                    "  service.{engine}: warning — stack.toml declares port {declared} but the running instance is on {port} (run `stack down --all` then `stack up` to pick up the new value)"
+                );
+            }
+            Ok(_) => {}
+            Err(e) => {
+                println!("  service.{engine}: warning — could not resolve declared port: {e:#}")
             }
         }
+        return Ok((entry.pid, port, false));
     }
 
     let port = svc.resolve_port(engine, allow_prompt)?.ok_or_else(|| {

@@ -108,11 +108,11 @@ fn install_portable_zip(url: &str, name: &str, version: &str) -> Result<()> {
             std::fs::create_dir_all(&outpath)
                 .with_context(|| format!("failed to create directory {}", outpath.display()))?;
         } else {
-            if let Some(p) = outpath.parent() {
-                if !p.exists() {
-                    std::fs::create_dir_all(p)
-                        .with_context(|| format!("failed to create parent dir {}", p.display()))?;
-                }
+            if let Some(p) = outpath.parent()
+                && !p.exists()
+            {
+                std::fs::create_dir_all(p)
+                    .with_context(|| format!("failed to create parent dir {}", p.display()))?;
             }
             let mut outfile = std::fs::File::create(&outpath)
                 .with_context(|| format!("failed to create {}", outpath.display()))?;
