@@ -295,15 +295,36 @@ impl Manifest {
                 return Ok((candidate, manifest));
             }
             if !dir.pop() {
-                bail!("no stack.toml found in this directory or any parent");
+                return Err(ManifestNotFound.into());
             }
         }
     }
 }
 
+#[derive(Debug)]
+pub struct ManifestNotFound;
+
+impl std::fmt::Display for ManifestNotFound {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "no stack.toml found in this directory or any parent")
+    }
+}
+
+impl std::error::Error for ManifestNotFound {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn find_and_load_parse_error_is_not_reported_as_not_found() {
+        let dir = std::env::temp_dir().join(format!("stack-nf-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("stack.toml"), "not = [valid").unwrap();
+        let err = Manifest::find_and_load(&dir).unwrap_err();
+        assert!(err.downcast_ref::<ManifestNotFound>().is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     fn write_and_load(dir: &std::path::Path, contents: &str) -> Manifest {
         let path = dir.join("stack.toml");
