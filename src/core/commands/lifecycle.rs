@@ -1,4 +1,5 @@
 use crate::core::caddy;
+use crate::core::commands::profile;
 use crate::core::commands::shared::{self, resolve_tool};
 use crate::core::manifest::{self, CloneEntry, Manifest, Service};
 use crate::core::process::{self, Runnable};
@@ -910,10 +911,41 @@ pub fn restart(project: Option<String>, all: bool, auto_yes: bool) -> Result<()>
     }
 }
 
-pub fn describe(target: Option<String>) -> Result<()> {
+enum DescribeTarget {
+    Project(PathBuf, Box<Manifest>),
+    Profile(String),
+}
+
+/// Decide what `stack describe` (no explicit name) should describe, given the
+/// manifest lookup result and the default profile name.
+fn pick_describe_target(
+    found: Result<(PathBuf, Manifest)>,
+    default_profile: Option<String>,
+) -> Result<DescribeTarget> {
+    match found {
+        Ok((path, manifest)) => Ok(DescribeTarget::Project(path, Box::new(manifest))),
+        Err(e) if e.downcast_ref::<manifest::ManifestNotFound>().is_some() => match default_profile
+        {
+            Some(name) => Ok(DescribeTarget::Profile(name)),
+            None => Err(anyhow!("{e} (or set a default profile / pass --profile)")),
+        },
+        Err(e) => Err(e),
+    }
+}
+
+pub fn describe(target: Option<String>, profile_name: Option<String>) -> Result<()> {
+    if let Some(p) = profile_name {
+        return profile::describe(&p);
+    }
     let (path, manifest) = match &target {
         Some(name) => resolve_up_target(name)?,
-        None => Manifest::find_and_load(Path::new("."))?,
+        None => match pick_describe_target(
+            Manifest::find_and_load(Path::new(".")),
+            profile::default_profile_name(),
+        )? {
+            DescribeTarget::Project(path, manifest) => (path, *manifest),
+            DescribeTarget::Profile(name) => return profile::describe(&name),
+        },
     };
     let project_dir = path.parent().unwrap_or(Path::new(".")).to_path_buf();
 
@@ -1159,6 +1191,49 @@ pub fn logs(name: Option<String>, follow: bool, tail: Option<usize>) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sample_manifest() -> (PathBuf, Manifest) {
+        let m: Manifest = toml::from_str(
+            "[project]
+name = \"demo\"
+",
+        )
+        .unwrap();
+        (PathBuf::from("stack.toml"), m)
+    }
+
+    fn not_found() -> anyhow::Error {
+        manifest::ManifestNotFound.into()
+    }
+
+    #[test]
+    fn describe_target_manifest_found_is_project() {
+        let t = pick_describe_target(Ok(sample_manifest()), Some("def".into())).unwrap();
+        assert!(matches!(t, DescribeTarget::Project(_, _)));
+    }
+
+    #[test]
+    fn describe_target_not_found_uses_default_profile() {
+        let t = pick_describe_target(Err(not_found()), Some("def".into())).unwrap();
+        assert!(matches!(t, DescribeTarget::Profile(n) if n == "def"));
+    }
+
+    #[test]
+    fn describe_target_not_found_without_default_keeps_error_message() {
+        let err = pick_describe_target(Err(not_found()), None).err().unwrap();
+        assert_eq!(
+            err.to_string(),
+            "no stack.toml found in this directory or any parent (or set a default profile / pass --profile)"
+        );
+    }
+
+    #[test]
+    fn describe_target_parse_error_is_propagated() {
+        let err = pick_describe_target(Err(anyhow!("bad toml")), Some("def".into()))
+            .err()
+            .unwrap();
+        assert_eq!(err.to_string(), "bad toml");
+    }
 
     #[test]
     fn shell_safe_path_converts_backslashes_so_shell_words_does_not_mangle_them() {

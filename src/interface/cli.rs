@@ -136,10 +136,13 @@ enum Command {
         #[arg(long)]
         yes: bool,
     },
-    /// Show a project's resolved environment (binary paths, php.ini, log file, ...)
+    /// Show a project's resolved environment (binary paths, php.ini, log file, ...); outside a project, describes the default profile
     Describe {
         /// Name of the project to describe; omit to use the current directory's project
         name: Option<String>,
+        /// Describe this profile instead of a project
+        #[arg(short = 'p', long, conflicts_with = "name")]
+        profile: Option<String>,
     },
     /// Show the status of running projects
     #[command(alias = "ps")]
@@ -317,7 +320,7 @@ pub fn run() {
         } => lifecycle::up(&target, prompt, clone, yes),
         Command::Down { project, all } => lifecycle::down(project, all),
         Command::Restart { project, all, yes } => lifecycle::restart(project, all, yes),
-        Command::Describe { name } => lifecycle::describe(name),
+        Command::Describe { name, profile } => lifecycle::describe(name, profile),
         Command::Status => {
             lifecycle::status();
             Ok(())
@@ -387,5 +390,28 @@ pub fn run() {
     if let Err(e) = result {
         eprintln!("stack: {e:#}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn describe_accepts_profile_flag() {
+        for args in [
+            ["stack", "describe", "-p", "foo"],
+            ["stack", "describe", "--profile", "foo"],
+        ] {
+            let cli = Cli::try_parse_from(args).unwrap();
+            assert!(
+                matches!(cli.command, Command::Describe { name: None, profile: Some(p) } if p == "foo")
+            );
+        }
+    }
+
+    #[test]
+    fn describe_profile_conflicts_with_name() {
+        assert!(Cli::try_parse_from(["stack", "describe", "proj", "-p", "foo"]).is_err());
     }
 }
